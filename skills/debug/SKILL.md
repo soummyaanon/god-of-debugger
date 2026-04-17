@@ -1,5 +1,5 @@
 ---
-description: Hypothesis-driven debugging. Use when the user reports a bug, a failing test, unexpected output, a crash, a regression, or says "debug this", "why is this broken", "figure out what's wrong". Generates multiple competing hypotheses spanning distinct causal axes and designs falsifiable experiments for each before touching code.
+description: Internal step of /god-of-debugger. Localizes the bug and generates multiple competing hypotheses spanning distinct causal axes, then designs a falsifiable experiment for each. Invoked automatically by the main command after repro is established.
 ---
 
 # Debug — Hypothesis Generation, Adversarial Expansion, and Experiment Design

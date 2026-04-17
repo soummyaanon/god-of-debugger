@@ -1,5 +1,5 @@
 ---
-description: Convert surviving debugging experiments into permanent regression tests and tag the fix commit with the session id. Invoked automatically by /god-of-debugger at the end of a successful session, or manually when the user says "promote the experiment", "lock in the repro", "add a regression test".
+description: Internal step of /god-of-debugger. Converts surviving debugging experiments into permanent regression tests and tags the fix commit with the session id. Invoked automatically by the main command after a fix is accepted; runs silently with no prompts.
 ---
 
 # Promote — Experiment → Regression Test (+ Telemetry)

@@ -1,5 +1,5 @@
 ---
-description: Establish or verify a deterministic reproduction command for a bug before hypothesis generation. Use when the user says "set up a repro", "make this reproducible", "/god-of-debugger:repro", or when /god-of-debugger:debug halts because no repro exists in session state.
+description: Internal step of /god-of-debugger. Establishes or verifies a deterministic reproduction command before hypothesis generation. Invoked automatically by the main command; also usable directly when the user says "set up a repro" or "make this reproducible".
 ---
 
 # Repro — Bootstrap the Reproduction Contract

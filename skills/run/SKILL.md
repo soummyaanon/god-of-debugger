@@ -1,5 +1,5 @@
 ---
-description: Execute debugging experiments in parallel. Use after /god-of-debugger:debug has written hypotheses into session state, or when the user says "run the experiments", "test the hypotheses", "kill the hypotheses in parallel".
+description: Internal step of /god-of-debugger. Dispatches one hypothesis-runner subagent per hypothesis in parallel and aggregates their verdicts into a survival table. Invoked automatically by the main command after hypotheses are written to session state.
 ---
 
 # Run — Parallel Experiment Execution
