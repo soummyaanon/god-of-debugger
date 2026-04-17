@@ -11,7 +11,9 @@ Most debugging sessions fail the same way: the model latches onto the first plau
 5. **Pre-register falsification conditions** before any experiment runs.
 6. **Run experiments in parallel** — one subagent per hypothesis, each returning `killed | survived | inconclusive` with budget accounting.
 7. **Block fix-shipping** (via a PostToolUse hook) while ≠ 1 hypothesis is alive.
-8. **Promote the surviving experiment into a regression test** before the fix, then verify the verdict flips after the fix, and tag the fix commit with a session trailer.
+8. **Automatically promote the surviving experiment into a regression test** once a fix is accepted, verify the verdict flips, and tag the fix commit with a session trailer. One line of output: `Added N regression tests to tests/.`
+
+All of that happens behind a single slash command (`/god-of-debugger <bug>`) with two inline Enter-to-continue gates, or zero gates under `--yolo`.
 
 ## Install
 
@@ -23,14 +25,37 @@ claude --plugin-dir ./god-of-debugger
 /plugin install god-of-debugger
 ```
 
-## Commands
+## Command
 
-| Command | When to use |
+One command. The whole pipeline.
+
+| Command | Behavior |
 |---|---|
-| `/god-of-debugger:repro <bug>` | Start here. Locks in a deterministic repro + creates session state. |
-| `/god-of-debugger:debug` | Generates localized primary hypotheses, then adversarial hypotheses, with pre-registered falsification conditions. |
-| `/god-of-debugger:run` | Dispatches one subagent per hypothesis in parallel. Writes artifacts under `.god-of-debugger/experiments/<Hn>/`. |
-| `/god-of-debugger:promote` | (Two phases.) Pre-fix: writes a failing regression test. Post-fix: verifies the test passes, re-runs the surviving experiment to confirm the verdict flips, adds the `God-Of-Debugger-Session` commit trailer, closes session. |
+| `/god-of-debugger <bug>` | Runs the full pipeline: repro → localize → primary + adversarial hypotheses → experiment design → parallel execution → survival table → fix (only if exactly one hypothesis survives) → silent promotion to regression tests. Pauses at two inline gates (Enter keeps going). |
+| `/god-of-debugger --yolo <bug>` | Same pipeline, zero gates. Prints the final survival table and proposes a fix only if exactly one hypothesis survives. The §5.4 fix-refusal still applies — `--yolo` skips gates, it does not bypass correctness. |
+| `/god-of-debugger --repro "<cmd>" <bug>` | Skip the interactive repro bootstrap and use `<cmd>` directly. Combine with `--yolo` for full autopilot. |
+
+### Inline gates (default flow)
+
+```
+Found 9 hypotheses (7 primary, 2 adversarial). [Enter] run all · [e] edit · [s] skip review →
+3 survived. [Enter] see details · [f] propose fix · [m] more experiments →
+```
+
+- `[Enter]` at either gate = keep going (full autopilot without the `--yolo` flag).
+- `[e]` at Gate 1 = edit hypotheses (drop rows, rewrite kill conditions, change budgets) before running.
+- `[f]` at Gate 2 = propose a fix. Only enabled when exactly one hypothesis survived.
+- `[m]` at Gate 2 = run a second round of tighter experiments against the survivors.
+
+### Automatic promotion
+
+When a fix is accepted, surviving experiments are silently converted into permanent regression tests in the repo's detected test directory. You see one line:
+
+```
+Added 2 regression tests to tests/.
+```
+
+No separate `/promote` command.
 
 ## Agents
 
@@ -79,27 +104,35 @@ Budget exhaustion → `inconclusive` with `budget_consumed` recorded. Inconclusi
 
 ## Typical flow
 
+Default (gated):
+
 ```
-/god-of-debugger:repro  "orders API returns 500 when cart is empty"
-# → runs the command 20x, hit rate 18/20, session opened
+/god-of-debugger "orders API returns 500 when cart is empty"
 
-/god-of-debugger:debug
-# → localizes the bug, emits primary + adversarial hypotheses with origin tags
+# → establishes repro (18/20 hits)
+# → localizes bug, emits 7 primary + 2 adversarial hypotheses
+# → Gate 1:  Found 9 hypotheses (7 primary, 2 adversarial). [Enter] run all · [e] edit · [s] skip review →
+# [Enter]
+# → 9 subagents run in parallel, writing to .god-of-debugger/experiments/<Hn>/
+# → Gate 2:  3 survived. [Enter] see details · [f] propose fix · [m] more experiments →
+# [m]
+# → tightens experiments for H3, H4, H6, re-runs
+# → Gate 2:  1 survived. [Enter] see details · [f] propose fix · [m] more experiments →
+# [f]
+# → proposes fix for H3, writes code
+# → silently promotes H3 experiment → regression test
+# → Added 1 regression test to tests/.
+```
 
-/god-of-debugger:run
-# → 6 subagents in parallel, each writes to .god-of-debugger/experiments/<Hn>/
-# → summary preserves origin tags: killed=[H1,H2,H5,H6], survivors=[H3], inconclusive=[H4]
+Autopilot (`--yolo`):
 
-/god-of-debugger:promote
-# → writes a failing regression test
-# → unlocks fix-shipping for probe-marked files; other edits still blocked
+```
+/god-of-debugger --yolo --repro "pytest -k test_checkout" "orders API returns 500 when cart is empty"
 
-# You (or Claude) implement the fix. Commit.
-
-/god-of-debugger:promote
-# → re-runs the test (passes), re-runs H3 experiment (verdict flips to killed)
-# → adds God-Of-Debugger-Session trailer to the fix commit
-# → closes session
+# → runs end-to-end with no prompts
+# → prints final survival table
+# → if exactly 1 survived: writes fix + regression test, closes session
+# → if != 1 survived: prints the §5.4 refusal and stops (correctness over speed)
 ```
 
 ## Directory layout

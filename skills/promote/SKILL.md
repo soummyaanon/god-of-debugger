@@ -1,5 +1,5 @@
 ---
-description: Convert a surviving debugging experiment into a permanent regression test and tag the fix commit with the session id. Use after /god-of-debugger:run has identified exactly one surviving hypothesis, or when the user says "promote the experiment", "lock in the repro", "add a regression test".
+description: Convert surviving debugging experiments into permanent regression tests and tag the fix commit with the session id. Invoked automatically by /god-of-debugger at the end of a successful session, or manually when the user says "promote the experiment", "lock in the repro", "add a regression test".
 ---
 
 # Promote — Experiment → Regression Test (+ Telemetry)
@@ -9,6 +9,13 @@ A bug that isn't pinned by a failing test will come back. This skill does three 
 1. Convert the surviving experiment into a permanent regression test that fails **now**, before the fix.
 2. After the fix lands, re-run every surviving experiment to confirm the verdict flips (fail → pass). Only experiments that actually flip get promoted.
 3. Append a `God-Of-Debugger-Session: <session_id>` trailer to the fix commit so future regression auditing can find it.
+
+## Two invocation modes
+
+- **Auto mode (default when called from `commands/auto.md`).** The fix has just been written in the same session. Do not prompt the user. Do not pause between phases. Run all three phases in one pass and emit exactly one output line (the "auto mode output" section at the bottom).
+- **Manual mode.** The user invokes the skill directly, usually between writing the fix and committing it. Run phase-by-phase with the prompts and the verbose output shown below.
+
+Detect the mode: if the caller passes `mode=auto` or the current tool context is `commands/auto.md`, use auto mode. Otherwise manual.
 
 ## Inputs
 
@@ -90,3 +97,31 @@ Surviving experiment: FLIPPED to killed (fix removed the cause)
 Fix commit:      <sha> (trailer added: God-Of-Debugger-Session: <session_id>)
 Session closed.
 ```
+
+## Auto mode
+
+When invoked from `commands/auto.md` after a fix has been written:
+
+1. For the surviving hypothesis (there is exactly one, enforced upstream), generate the regression test and confirm it **would have** failed against the pre-fix code — use the saved `probe.diff` / experiment artifact as the source of the failure signal, or temporarily check out the pre-fix state with `git stash` if that is cleaner. Restore the fixed state before exiting.
+2. Run the new test against the fixed code. It must pass. If it fails, the fix is wrong — halt and surface the failure; do not claim success.
+3. Revert every un-promoted `probe.diff` under `.god-of-debugger/experiments/*/probe.diff`.
+4. Append the `God-Of-Debugger-Session: <session_id>` trailer to the fix commit. If the fix has not been committed yet, leave a message for the next commit instead of amending.
+5. Mark `session.status = "closed"`, `session.closed_at = now`, record `session.regression_tests = [<paths>]`.
+
+Do not prompt during any of this. Do not print phase headers.
+
+### Auto mode output (exactly one line)
+
+On success:
+
+```
+Added <N> regression tests to <detected-dir>/.
+```
+
+On failure (test didn't flip, fix incomplete, or framework not detected):
+
+```
+No regression tests added — <reason in 6 words or fewer>. Session: <session_id>.
+```
+
+The caller (`commands/auto.md`) relies on this being a single line. Do not add decoration.
