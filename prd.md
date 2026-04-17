@@ -40,7 +40,10 @@ A Claude Code plugin — god-of-debugger — that turns a bug report into a fals
 When invoked on a bug, the plugin:
 
 Generates 5–8 explicit hypotheses about what could be causing it, across distinct causal categories (not 8 variants of "maybe the null check is wrong"). Hypotheses must span at least 4 of these axes: data, control-flow, concurrency, config/env, dependency, contract/boundary, resource/quota. The prompt rejects a set that clusters on one axis.
+Runs an adversarial pass after the primary list. A separate agent sees the primary hypotheses and is explicitly told to find the category gap: config, env, deployment, human error, upstream/downstream, or "the premise is wrong". It adds 2–3 hypotheses labeled `origin: adversarial`.
+Localizes the bug before fan-out so each subagent receives only the narrow file/function set relevant to its hypothesis rather than the whole repo.
 Designs a falsification experiment for each — the cheapest artifact that, if executed, would prove that hypothesis false. Experiments are typed: log probe, assertion, targeted unit test, git bisect range, dependency pin, environment toggle.
+Pre-registers the falsification criterion for each hypothesis before execution: what exact observation kills it, and what exact observation lets it survive. Runners judge against that pre-registered criterion rather than rationalizing after the fact.
 Runs them in parallel using Claude Code subagents, one hypothesis per agent.
 Reports a survival table: which hypotheses were killed, which survived, and what each experiment learned.
 Refuses to propose a fix while more than one hypothesis survives. The user is forced to either run more experiments or declare a tie.
@@ -154,6 +157,7 @@ god-of-debugger/
 │   └── promote/
 │       └── SKILL.md          ← experiment → regression test conversion
 ├── agents/
+│   ├── adversary.md          ← subagent: finds missing categories the primary list skipped
 │   ├── hypothesis-runner.md  ← subagent: runs ONE experiment, reports killed/survived/inconclusive
 │   └── bisect-runner.md      ← specialized subagent for git bisect experiments
 ├── hooks/
@@ -165,8 +169,18 @@ god-of-debugger/
 Each hypothesis gets its own subagent because:
 
 They run in parallel — 7 hypotheses × 2 min each is 2 min, not 14.
-They have isolated context — a subagent chasing H3 doesn't get confused by evidence for H5. Each subagent receives only `{ bug_summary, repro_command, hypothesis_text, experiment_spec, repo_path, budget }`. It does not see other hypotheses, other verdicts, or prior session transcripts.
-They report in a structured schema — `{ hypothesis_id, verdict: killed|survived|inconclusive, evidence, artifact_path, budget_consumed, retries }` — which the parent agent aggregates into the survival table. `inconclusive` is reserved for subagents that exhausted their budget without a decisive result; the evidence field must explain which signal was missing.
+They have isolated context — a subagent chasing H3 doesn't get confused by evidence for H5. Each subagent receives only `{ bug_summary, repro_command, hypothesis, repo_path, budget }`, and `hypothesis.relevant_files` narrows the code it should read. It does not see other hypotheses, other verdicts, or prior session transcripts.
+They report in a structured schema — `{ hypothesis_id, origin, verdict: killed|survived|inconclusive, confidence, evidence, falsification_check, artifact_path, budget_consumed, retries }` — which the parent agent aggregates into the survival table. `inconclusive` is reserved for subagents that exhausted their budget without a decisive result; the evidence field must explain which signal was missing.
+
+6.1.1 Why the adversary
+
+Falsification only works if the true cause is actually present in the candidate set. The primary generator will be biased toward code bugs because code is the visible surface and the model is trained heavily on code. A dedicated adversarial pass is the cheapest correction:
+
+- it is prompt-defined rather than infrastructure-heavy
+- it specifically searches for categories the primary pass tends to miss
+- it gives the user a visible check against "you never even considered the embarrassing possibility"
+
+The adversary's outputs are labeled `origin: adversarial` for traceability, but once generated they are tested exactly like primary hypotheses.
 6.2 Why the hook
 
 The PostToolUse hook watches for Write/Edit tool calls during a god-of-debugger session. If the session state shows >1 surviving hypothesis and Claude tries to edit non-experiment code, the hook blocks the edit and injects a reminder to finish falsification first. Without this hook, Claude's default "ship the fix" instinct leaks back in.
@@ -188,10 +202,29 @@ The plugin keeps per-session state in `.god-of-debugger/sessions/<session_id>.js
   "branch": "feature/checkout",
   "bug": "intermittent 500s on /api/checkout",
   "repro": { "command": "pytest -k test_checkout_load", "hit_rate": 0.85, "runs": 20 },
+  "localization": {
+    "relevant_files": ["checkout/service.go", "cart/session.go", "deploy/docker-compose.yml"],
+    "basis": "stack trace + git log on touched files"
+  },
   "hypotheses": [
-    { "id": "H1", "text": "...", "axis": "concurrency", "experiment": {...}, "verdict": "killed", "evidence": "...", "artifact_path": ".god-of-debugger/experiments/H1/" },
+    {
+      "id": "H1",
+      "origin": "primary",
+      "text": "...",
+      "axis": "concurrency",
+      "relevant_files": ["cart/session.go"],
+      "kill_condition": "...",
+      "survive_condition": "...",
+      "experiment": {...},
+      "verdict": "killed",
+      "evidence": "...",
+      "artifact_path": ".god-of-debugger/experiments/H1/"
+    },
     ...
   ],
+  "cost_log": {
+    "runs": []
+  },
   "experiments_dir": ".god-of-debugger/experiments/",
   "status": "open|closed|repro_unstable",
   "created_at": "...",
@@ -204,6 +237,7 @@ This is what /god-of-debugger:run reads to dispatch subagents, and what /god-of-
 
 Each hypothesis subagent writes to `.god-of-debugger/experiments/<Hn>/`:
 
+- `preregistered.json` — copy of the falsification conditions and experiment spec before execution.
 - `experiment.md` — human-readable spec the subagent executed.
 - `probe.diff` — any temporary code it inserted (for revert on session close).
 - `run.log` — stdout/stderr of the repro with the probe active.
@@ -236,6 +270,16 @@ Every experiment carries a budget, enforced by the subagent. Defaults:
 - Iterations: 100 repro runs for statistical experiments (e.g. race detection under load).
 
 Budgets are overridable per hypothesis at approval time. When a subagent hits any budget without a decisive verdict, it returns `inconclusive` with `budget_consumed` set and `evidence` describing the last signal seen. Inconclusive hypotheses count toward "survived" for the refusal-to-fix gate — the user must decide to invest more budget or drop them.
+
+7.2 Token efficiency and model routing
+
+The plugin is intentionally token-heavy, so it needs explicit controls:
+
+- Localization first. This is the dominant cost lever; if a runner gets the whole repo, the orchestrator already failed.
+- Cheap-first experiments. Kill easy hypotheses with probes/toggles before escalating to slower tests or bisects.
+- Prompt caching layout. Stable instruction blocks belong at the front of repeated agent prompts.
+- Model routing. Use a stronger model for experiment design and a cheaper model for verdict extraction when the output is already strongly structured.
+- Cost logging. Every run appends model and token data into `session.cost_log`; optimization order should be driven by that data, not by intuition.
 
 8. Success criteria
 

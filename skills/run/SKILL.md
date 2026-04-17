@@ -6,10 +6,12 @@ description: Execute debugging experiments in parallel. Use after /god-of-debugg
 
 You orchestrate the experiments designed by the `debug` skill. Each hypothesis gets its own subagent (`hypothesis-runner`, or `bisect-runner` for bisect experiments). Subagents run in **parallel** and return a strict verdict.
 
+This skill also maintains the session `cost_log`. Do not optimize blindly; record what happened.
+
 ## Inputs
 
 1. `.god-of-debugger/current` → active `session_id`.
-2. `.god-of-debugger/sessions/<session_id>.json` → bug, repro, hypotheses.
+2. `.god-of-debugger/sessions/<session_id>.json` → bug, repro, localization, hypotheses.
 
 If either is missing, STOP and tell the user to run `/god-of-debugger:repro` and `/god-of-debugger:debug` first.
 
@@ -26,9 +28,10 @@ If either is missing, STOP and tell the user to run `/god-of-debugger:repro` and
    - otherwise → `hypothesis-runner`
 2. Pass each subagent only: `{ session_id, bug_summary, repro: {command, hit_rate}, hypothesis, budget, repo_path }`. Never pass other hypotheses or prior verdicts — isolation is the point.
 3. Wait for all verdicts. Do not early-exit.
-4. For each verdict, ensure the subagent wrote `.god-of-debugger/experiments/<Hn>/verdict.json`, `probe.diff` (if any edit was made), and `run.log`. If artifacts are missing, mark the hypothesis `inconclusive` with `evidence: "runner returned no artifacts"`.
-5. Update `session.hypotheses[i]` with `verdict`, `evidence`, `artifact_path`, `budget_consumed`, `retries`.
-6. Write the survivor set to `session.survivors` and touch `session.updated_at`.
+4. For each verdict, ensure the subagent wrote `.god-of-debugger/experiments/<Hn>/preregistered.json`, `verdict.json`, `probe.diff` (if any edit was made), and `run.log`. If artifacts are missing, mark the hypothesis `inconclusive` with `evidence: "runner returned incomplete artifacts"`.
+5. Update `session.hypotheses[i]` with `verdict`, `evidence`, `artifact_path`, `budget_consumed`, `retries`, `confidence`, and `falsification_check`.
+6. Append per-run usage into `session.cost_log.runs[]` with hypothesis id, origin, model, and token usage if available.
+7. Write the survivor set to `session.survivors` and touch `session.updated_at`.
 
 ## Output format
 
@@ -38,7 +41,13 @@ Print the aggregated table to the user:
 {
   "session_id": "<id>",
   "summary": [
-    { "id": "H1", "axis": "concurrency", "verdict": "killed", "evidence": "<one line>" }
+    {
+      "id": "H1",
+      "origin": "primary",
+      "axis": "concurrency",
+      "verdict": "killed",
+      "evidence": "<one line>"
+    }
   ],
   "survivors": ["H3", "H4"],
   "inconclusive": [],
@@ -60,7 +69,7 @@ Regeneration counter lives in `session.regenerations` (increment on each). After
 
 Likely root cause. State it plainly.
 
-> "H_n survived. Axis: <axis>. Evidence: <quote>. Run `/god-of-debugger:promote` to convert the experiment into a regression test before writing the fix."
+> "H_n survived. Origin: <origin>. Axis: <axis>. Evidence: <quote>. Run `/god-of-debugger:promote` to convert the experiment into a regression test before writing the fix."
 
 ### 2+ survivors
 
@@ -79,3 +88,4 @@ If the same hypothesis flips verdict across runner retries (runner reports `retr
 - `inconclusive` is a first-class verdict. Includes: timeout, crash, ambiguous output, budget exhaustion. Never coerce to `killed`/`survived`.
 - Subagents that crash or time out → their hypothesis is `inconclusive`, not `survived`.
 - Parallel dispatch is non-negotiable. Sequential runs defeat the design.
+- Preserve `origin` in every aggregation table. Users need to know when an adversarial hypothesis is the last one standing.

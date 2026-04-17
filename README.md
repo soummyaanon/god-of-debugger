@@ -5,10 +5,13 @@ Hypothesis-driven, parallel debugging for Claude Code.
 Most debugging sessions fail the same way: the model latches onto the first plausible explanation, "fixes" it, and moves on. The real bug either comes back or was never actually diagnosed. This plugin forces a scientific workflow:
 
 1. **Establish a reliable repro** before any hypothesis work.
-2. **Generate 5–8 competing hypotheses** spanning at least 4 distinct causal axes (data / control-flow / concurrency / config / deps / env / contract).
-3. **Run experiments in parallel** — one subagent per hypothesis, each returning `killed | survived | inconclusive` with budget accounting.
-4. **Block fix-shipping** (via a PostToolUse hook) while ≠ 1 hypothesis is alive.
-5. **Promote the surviving experiment into a regression test** before the fix, then verify the verdict flips after the fix, and tag the fix commit with a session trailer.
+2. **Localize the bug** to a narrow working set so subagents do not inherit the whole repo by default.
+3. **Generate 5–8 primary hypotheses** spanning at least 4 distinct causal axes (data / control-flow / concurrency / config / deps / env / contract).
+4. **Run an adversarial pass** that adds 2–3 hypotheses from categories the main pass is biased away from.
+5. **Pre-register falsification conditions** before any experiment runs.
+6. **Run experiments in parallel** — one subagent per hypothesis, each returning `killed | survived | inconclusive` with budget accounting.
+7. **Block fix-shipping** (via a PostToolUse hook) while ≠ 1 hypothesis is alive.
+8. **Promote the surviving experiment into a regression test** before the fix, then verify the verdict flips after the fix, and tag the fix commit with a session trailer.
 
 ## Install
 
@@ -25,13 +28,14 @@ claude --plugin-dir ./god-of-debugger
 | Command | When to use |
 |---|---|
 | `/god-of-debugger:repro <bug>` | Start here. Locks in a deterministic repro + creates session state. |
-| `/god-of-debugger:debug` | Generates hypotheses across ≥4 causal axes, designs falsification experiments. |
+| `/god-of-debugger:debug` | Generates localized primary hypotheses, then adversarial hypotheses, with pre-registered falsification conditions. |
 | `/god-of-debugger:run` | Dispatches one subagent per hypothesis in parallel. Writes artifacts under `.god-of-debugger/experiments/<Hn>/`. |
 | `/god-of-debugger:promote` | (Two phases.) Pre-fix: writes a failing regression test. Post-fix: verifies the test passes, re-runs the surviving experiment to confirm the verdict flips, adds the `God-Of-Debugger-Session` commit trailer, closes session. |
 
 ## Agents
 
 - `hypothesis-runner` — runs one experiment (probe / assertion / test) with enforced budgets, writes artifacts, returns a strict verdict.
+- `adversary` — adds 2–3 explicitly adversarial hypotheses that challenge the main list's category bias.
 - `bisect-runner` — specialized for `git bisect` experiments (v0.2).
 
 ## Hook
@@ -51,8 +55,10 @@ Layout (per-repo, per-branch):
 ├── current                         plain text: active session_id
 ├── sessions/
 │   └── <session_id>.json           bug, repro, hypotheses, verdicts, survivors, status
+│                                   localization, cost_log
 └── experiments/
     └── H3/
+        ├── preregistered.json      kill/survive conditions frozen before execution
         ├── experiment.md           human-readable spec
         ├── probe.diff              temp edits (for revert)
         ├── run.log                 repro stdout/stderr
@@ -78,11 +84,11 @@ Budget exhaustion → `inconclusive` with `budget_consumed` recorded. Inconclusi
 # → runs the command 20x, hit rate 18/20, session opened
 
 /god-of-debugger:debug
-# → emits JSON with H1..H6 across axes [data, control-flow, deps, contract]
+# → localizes the bug, emits primary + adversarial hypotheses with origin tags
 
 /god-of-debugger:run
 # → 6 subagents in parallel, each writes to .god-of-debugger/experiments/<Hn>/
-# → summary: killed=[H1,H2,H5,H6], survivors=[H3], inconclusive=[H4]
+# → summary preserves origin tags: killed=[H1,H2,H5,H6], survivors=[H3], inconclusive=[H4]
 
 /god-of-debugger:promote
 # → writes a failing regression test
@@ -103,10 +109,11 @@ god-of-debugger/
 ├── .claude-plugin/plugin.json
 ├── skills/
 │   ├── repro/SKILL.md      establish deterministic repro + session state
-│   ├── debug/SKILL.md      hypothesis generation + experiment design
+│   ├── debug/SKILL.md      localization + hypothesis generation + adversarial expansion
 │   ├── run/SKILL.md        parallel execution orchestration
 │   └── promote/SKILL.md    regression test + post-fix verify + telemetry trailer
 ├── agents/
+│   ├── adversary.md
 │   ├── hypothesis-runner.md
 │   └── bisect-runner.md
 ├── hooks/
@@ -118,9 +125,12 @@ god-of-debugger/
 ## Design notes
 
 - **The quality of this plugin is the quality of `skills/debug/SKILL.md`.** Iterate there first.
+- The highest-leverage extension is the adversarial pass. It exists to catch config/env/deployment/"premise is wrong" failures that a code-biased model will under-generate.
 - Subagent output schemas are strict JSON on purpose — the orchestrator parses verdicts mechanically so it can't be "talked into" a wrong conclusion.
+- Pre-registered `kill_condition` / `survive_condition` are part of the protocol, not commentary. If those drift after execution, the system is no longer falsifying.
 - `inconclusive` is a first-class verdict. Forcing a `killed`/`survived` call on ambiguous output is the failure mode this plugin exists to prevent.
 - MVP ships experiment types 1–3 (probe, assertion, test). Types 4–6 (bisect, dep-pin, env-toggle) are parked until v0.2.
+- Token-efficiency is driven first by localization, then by cheap-first experiments, then by prompt caching / model routing. Measure actual cost in `session.cost_log` before optimizing deeper.
 - Telemetry is local-only: commit trailers in git, no network calls. A reporting script that walks history for `held/reverted/amended/regressed` outcomes ships in v0.2.
 
 ## License
