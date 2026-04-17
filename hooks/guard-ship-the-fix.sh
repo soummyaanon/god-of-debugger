@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # guard-ship-the-fix.sh
 #
-# PostToolUse hook for god-of-debugger.
+# PreToolUse hook for god-of-debugger.
 #
 # Rule: while an active debugging session has != 1 surviving hypothesis,
 # block edits to production files. Allowlist:
