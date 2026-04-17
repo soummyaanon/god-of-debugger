@@ -1,19 +1,26 @@
 # god-of-debugger
 
-Hypothesis-driven, parallel debugging for Claude Code.
+**Debug by disproving.** A Claude Code plugin that turns a bug report into a falsification protocol — hypotheses, parallel experiments, and a fix only when exactly one hypothesis survives.
 
-Most debugging sessions fail the same way: the model latches onto the first plausible explanation, "fixes" it, and moves on. The real bug either comes back or was never actually diagnosed. This plugin forces a scientific workflow:
+> One command. One paste. Enter to keep going.
 
-1. **Establish a reliable repro** before any hypothesis work.
-2. **Localize the bug** to a narrow working set so subagents do not inherit the whole repo by default.
-3. **Generate 5–8 primary hypotheses** spanning at least 4 distinct causal axes (data / control-flow / concurrency / config / deps / env / contract).
-4. **Run an adversarial pass** that adds 2–3 hypotheses from categories the main pass is biased away from.
-5. **Pre-register falsification conditions** before any experiment runs.
-6. **Run experiments in parallel** — one subagent per hypothesis, each returning `killed | survived | inconclusive` with budget accounting.
-7. **Block fix-shipping** (via a PostToolUse hook) while ≠ 1 hypothesis is alive.
-8. **Automatically promote the surviving experiment into a regression test** once a fix is accepted, verify the verdict flips, and tag the fix commit with a session trailer. One line of output: `Added N regression tests to tests/.`
+---
 
-All of that happens behind a single slash command (`/god-of-debugger <bug>`) with two inline Enter-to-continue gates, or zero gates under `--yolo`.
+## Why this exists
+
+The default debugging loop — yours, mine, Claude's — looks like this:
+
+```
+read stack trace → form one hypothesis → scan for confirming evidence → ship patch → move on
+```
+
+That's confirmation-biased guessing with extra steps. The bug "goes away," nobody can prove the cause was the cause, and three weeks later it comes back in a slightly different shape.
+
+Senior engineers debug by **elimination**: enumerate what could be wrong, design the cheapest experiment that would rule each one out, and let what survives be the cause.
+
+`god-of-debugger` makes Claude do exactly that, in parallel, behind one slash command.
+
+---
 
 ## Install
 
@@ -25,146 +32,356 @@ claude --plugin-dir ./god-of-debugger
 /plugin install god-of-debugger
 ```
 
-## Command
+---
 
-One command. The whole pipeline.
+## The only command you need
 
-| Command | Behavior |
+```bash
+/god-of-debugger <paste your bug here>
+```
+
+That's it. The whole pipeline runs end-to-end:
+
+```
+  1. establish repro           →   a deterministic way to trigger the bug
+  2. localize                  →   narrow to the files that matter
+  3. generate hypotheses       →   5–8 primary + 2–3 adversarial
+  4. design experiments        →   one falsification test per hypothesis
+  5. run in parallel           →   one subagent per hypothesis
+  6. survival table            →   killed / survived / inconclusive
+  7. propose fix               →   ONLY if exactly one survives
+  8. promote to regression     →   silently, one line of output
+```
+
+Two inline gates pause the flow so you can intervene. Hitting Enter keeps going.
+
+---
+
+## The user journey
+
+### Scenario: "My checkout API throws 500s under load. Sometimes."
+
+You've been poking at this for an hour. You have a guess. You don't trust your guess. You type:
+
+```bash
+/god-of-debugger "intermittent 500s on /api/checkout under load"
+```
+
+#### Step 1 — Repro
+
+```
+Establishing reproduction...
+→ Detected pytest framework.
+→ Suggested repro: pytest -k test_checkout_load
+→ Running 20 iterations... 18/20 failed (90% hit rate). Locked in.
+
+Session: a1b2c3-feature-checkout
+```
+
+If you already have a repro command, you can skip the bootstrap:
+
+```bash
+/god-of-debugger --repro "pytest -k test_checkout_load" "intermittent 500s on /api/checkout"
+```
+
+#### Step 2 — Localize + hypothesize
+
+```
+Localizing...
+→ Touched files: checkout/service.go, cart/session.go, deploy/docker-compose.yml
+→ Basis: stack trace + recent git log
+
+Generating hypotheses (primary)...
+Generating hypotheses (adversarial)...
+```
+
+#### Gate 1 — review the plan
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Bug:  intermittent 500s on /api/checkout under load                      │
+│ Repro: pytest -k test_checkout_load  (18/20 hit rate)                    │
+├────┬───────┬──────────────┬──────────────────────────────┬───────────────┤
+│ ID │ ORIGIN│ AXIS         │ CLAIM                        │ EXPERIMENT    │
+├────┼───────┼──────────────┼──────────────────────────────┼───────────────┤
+│ H1 │ prim  │ concurrency  │ Race on cart_session map     │ assertion     │
+│ H2 │ prim  │ resource     │ DB connection pool exhausted │ log probe     │
+│ H3 │ prim  │ upstream     │ Payment API timeout cascade  │ mock + latency│
+│ H4 │ prim  │ data         │ Stale Redis TTL              │ unit test     │
+│ H5 │ prim  │ contract     │ Null inventory deser         │ unit test     │
+│ H6 │ prim  │ dependency   │ serde bump regression        │ bisect (v0.2) │
+│ H7 │ prim  │ control-flow │ Retry amplifies failure      │ assertion     │
+│ H8 │ adv   │ config/env   │ Sticky-session misconfig     │ env toggle    │
+│ H9 │ adv   │ deploy       │ Wrong container memory limit │ env toggle    │
+└────┴───────┴──────────────┴──────────────────────────────┴───────────────┘
+
+Found 9 hypotheses (7 primary, 2 adversarial).
+[Enter] run all  ·  [e] edit  ·  [s] skip review  →
+```
+
+- Hit **Enter** → all 9 experiments run in parallel.
+- Type **`e`** → drop rows, rewrite kill conditions, change budgets, then re-prompt.
+- Type **`s`** → same as Enter, for muscle memory.
+
+#### Step 3 — Parallel execution
+
+```
+Dispatching 9 hypothesis-runner subagents...
+
+  [H1] concurrency    ████████████████████  done (killed)
+  [H2] resource       ████████████████████  done (killed)
+  [H3] upstream       ████████████████████  done (survived)
+  [H4] data           ████████████████████  done (survived)
+  [H5] contract       ████████████████████  done (killed)
+  [H6] dependency     ████████████████████  done (inconclusive — needs bisect)
+  [H7] control-flow   ████████████████████  done (killed)
+  [H8] config/env     ████████████████████  done (killed)
+  [H9] deploy         ████████████████████  done (killed)
+
+6 killed · 2 survived · 1 inconclusive
+```
+
+#### Gate 2 — survival table
+
+```
+┌────┬────────────┬─────────────────────────────────────────────────────────┐
+│ ID │ VERDICT    │ EVIDENCE                                                │
+├────┼────────────┼─────────────────────────────────────────────────────────┤
+│ H1 │ KILLED     │ assertion never fired across 10k iterations             │
+│ H2 │ KILLED     │ pool depth maxed at 12/50 during repro                  │
+│ H3 │ SURVIVED   │ latency injection reproduces the 500s                   │
+│ H4 │ SURVIVED   │ TTL inspection shows keys at 7d instead of 1h           │
+│ H5 │ KILLED     │ new fixture test passed cleanly                         │
+│ H6 │ INCONCLUS. │ budget exhausted mid-bisect                             │
+│ H7 │ KILLED     │ retry path disabled, bug persists                       │
+│ H8 │ KILLED     │ sticky sessions disabled, bug persists                  │
+│ H9 │ KILLED     │ memory limit doubled, bug persists                      │
+└────┴────────────┴─────────────────────────────────────────────────────────┘
+
+3 survived (H3, H4, H6 — inconclusive counts as alive).
+[Enter] see details  ·  [f] propose fix  ·  [m] more experiments  →
+```
+
+- Hit **Enter** → expand evidence and artifact paths for each survivor, re-prompt.
+- Type **`m`** → run a second round of tighter experiments against the survivors. Most sessions converge here.
+- Type **`f`** → propose a fix. **Disabled** while more than one hypothesis is alive. You'll see:
+
+```
+3 hypotheses are still alive (H3, H4, H6). Shipping a fix now means guessing
+which one it is. Want to run another round of falsification, or explicitly
+accept that you're guessing?
+```
+
+This refusal is the whole point. It's also backed by a Claude Code hook that will block `Write`/`Edit` to production files while survivors ≠ 1 — so even a yolo run can't cheat.
+
+#### Step 4 — Converge
+
+You type **`m`**. A second round runs with narrower experiments:
+
+```
+Round 2: tightening H3, H4, H6...
+
+  [H3] upstream   ████████████████████  done (killed — timeout is a symptom, not cause)
+  [H4] data       ████████████████████  done (survived — confirmed)
+  [H6] dependency ████████████████████  done (killed — bisect cleared the range)
+
+1 survived (H4).
+[Enter] see details  ·  [f] propose fix  ·  [m] more experiments  →
+```
+
+#### Step 5 — Fix
+
+You type **`f`**.
+
+```
+Proposing fix for H4 (stale Redis TTL):
+→ cart/session.go:142 — TTL was hard-coded to 7*24h instead of 1h.
+→ Writing minimal patch...
+→ Running pytest -k test_checkout_load to verify... 20/20 pass.
+```
+
+#### Step 6 — Silent promotion
+
+```
+Added 1 regression test to tests/test_checkout_session_ttl.py.
+Session closed. Fix commit tagged: God-Of-Debugger-Session: a1b2c3-feature-checkout
+```
+
+Done. Total elapsed: ~4 minutes.
+
+---
+
+## When you trust the loop: `--yolo`
+
+```bash
+/god-of-debugger --yolo --repro "pytest -k test_checkout" "intermittent 500s on /api/checkout"
+```
+
+Zero gates. Runs end-to-end. Prints the final survival table. If exactly one hypothesis survives, writes the fix and the regression test. If not, prints the refusal and stops.
+
+`--yolo` skips gates. It does **not** bypass the fix-refusal. Correctness is not a gate.
+
+---
+
+## Flag reference
+
+| Flag | Effect |
 |---|---|
-| `/god-of-debugger <bug>` | Runs the full pipeline: repro → localize → primary + adversarial hypotheses → experiment design → parallel execution → survival table → fix (only if exactly one hypothesis survives) → silent promotion to regression tests. Pauses at two inline gates (Enter keeps going). |
-| `/god-of-debugger --yolo <bug>` | Same pipeline, zero gates. Prints the final survival table and proposes a fix only if exactly one hypothesis survives. The §5.4 fix-refusal still applies — `--yolo` skips gates, it does not bypass correctness. |
-| `/god-of-debugger --repro "<cmd>" <bug>` | Skip the interactive repro bootstrap and use `<cmd>` directly. Combine with `--yolo` for full autopilot. |
+| (no flags) | Full pipeline with two inline gates. Enter at either gate keeps going. |
+| `--yolo` | Skip both gates. Fix-refusal still applies. |
+| `--repro "<cmd>"` | Skip the repro bootstrap. Use `<cmd>` directly. |
 
-### Inline gates (default flow)
+Flags combine: `--yolo --repro "..."` is the full autopilot.
 
-```
-Found 9 hypotheses (7 primary, 2 adversarial). [Enter] run all · [e] edit · [s] skip review →
-3 survived. [Enter] see details · [f] propose fix · [m] more experiments →
-```
+---
 
-- `[Enter]` at either gate = keep going (full autopilot without the `--yolo` flag).
-- `[e]` at Gate 1 = edit hypotheses (drop rows, rewrite kill conditions, change budgets) before running.
-- `[f]` at Gate 2 = propose a fix. Only enabled when exactly one hypothesis survived.
-- `[m]` at Gate 2 = run a second round of tighter experiments against the survivors.
-
-### Automatic promotion
-
-When a fix is accepted, surviving experiments are silently converted into permanent regression tests in the repo's detected test directory. You see one line:
+## The two gates, at a glance
 
 ```
-Added 2 regression tests to tests/.
+                  ┌─────────────────────────────────────────────┐
+                  │  Found N hypotheses.                        │
+    Gate 1        │  [Enter] run all · [e] edit · [s] skip  →   │
+                  └─────────────────────────────────────────────┘
+
+                  ┌─────────────────────────────────────────────┐
+                  │  K survived.                                │
+    Gate 2        │  [Enter] details · [f] fix · [m] more  →    │
+                  └─────────────────────────────────────────────┘
 ```
 
-No separate `/promote` command.
+Default = Enter = autopilot. Power users intervene with one keypress.
 
-## Agents
+---
 
-- `hypothesis-runner` — runs one experiment (probe / assertion / test) with enforced budgets, writes artifacts, returns a strict verdict.
-- `adversary` — adds 2–3 explicitly adversarial hypotheses that challenge the main list's category bias.
-- `bisect-runner` — specialized for `git bisect` experiments (v0.2).
+## When to reach for this
 
-## Hook
+Use it when:
 
-- `PostToolUse` on `Write|Edit`: while a session is `open` and survivor count ≠ 1, blocks edits to production code. Allowlist:
-  - `.god-of-debugger/**`
-  - Test files (path heuristic)
-  - Files carrying a `@god-of-debugger:probe <id>` marker comment
-- Hook is a no-op when no `.god-of-debugger/current` pointer exists, or when session status is `closed` / `repro_unstable`.
+- A bug has been "fixed" before and came back.
+- A flaky test where the last three theories didn't pan out.
+- A production incident where the obvious cause feels too obvious.
+- A legacy system where nobody trusts their mental model anymore.
+
+Don't use it for:
+
+- Typos, missing imports, or anything a linter catches.
+- Bugs where the fix is already obvious and cheap to verify.
+
+This plugin is **slower per bug on purpose**. It trades per-iteration speed for per-fix permanence. If you're using it for trivial bugs, you'll hate the friction. That's the friction working.
+
+---
+
+## What happens under the hood
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    /god-of-debugger <bug>                              │
+└────────────────────────────┬───────────────────────────────────────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         ▼                   ▼                   ▼
+    skills/repro       skills/debug         skills/run
+    (bootstrap)        (localize +          (fan-out)
+                       hypothesize +
+                       experiment design)
+         │                   │                   │
+         │                   │      ┌────────────┴─────────────┐
+         │                   │      ▼             ▼            ▼
+         │                   │  hypothesis-  hypothesis-  hypothesis-
+         │                   │   runner       runner       runner
+         │                   │     (H1)         (H2)        ... (HN)
+         │                   │      │             │            │
+         │                   │      └─────────────┼────────────┘
+         │                   │                    ▼
+         │                   │           survival table
+         │                   │                    │
+         │                   └──> adversary ──────┘
+         │                                        │
+         │            ┌───────────────────────────┘
+         │            ▼
+         │      skills/promote  (auto, only if survivors == 1)
+         │            │
+         └────────────┴──> .god-of-debugger/ (session state + artifacts)
+```
+
+- **Subagents** isolate context — each `hypothesis-runner` sees only the bug, the repro, its one hypothesis, and narrowed `relevant_files`. It never sees other hypotheses or verdicts, so it can't be biased by them.
+- **The adversary** is a separate subagent that reads the primary list and is told to find the category gap (config, env, deploy, human error, premise-wrong). It exists to cover the model's code-bias.
+- **The hook** (`PostToolUse` on `Write|Edit`) reads session state and blocks production-file edits while survivor count ≠ 1. Even `--yolo` can't fight it.
+
+---
 
 ## Session state
 
-Layout (per-repo, per-branch):
+Per-repo, per-branch. Survives across invocations:
 
 ```
 .god-of-debugger/
-├── current                         plain text: active session_id
+├── current                         active session_id (plain text)
 ├── sessions/
-│   └── <session_id>.json           bug, repro, hypotheses, verdicts, survivors, status
-│                                   localization, cost_log
+│   └── <session_id>.json           bug, repro, hypotheses, verdicts, survivors,
+│                                   localization, cost_log, status
 └── experiments/
     └── H3/
-        ├── preregistered.json      kill/survive conditions frozen before execution
+        ├── preregistered.json      kill/survive conditions, frozen pre-execution
         ├── experiment.md           human-readable spec
-        ├── probe.diff              temp edits (for revert)
+        ├── probe.diff              temp code edits (auto-reverted on close)
         ├── run.log                 repro stdout/stderr
         └── verdict.json            strict schema from hypothesis-runner
 ```
 
-`session_id` = `<8-char-uuid>-<branch-slug>`, so parallel worktrees don't collide.
+`session_id = <8-char-uuid>-<branch-slug>` so parallel worktrees don't collide.
+
+---
 
 ## Budgets
 
-Defaults per experiment, overridable at approval time:
+Each experiment carries a budget, enforced by the subagent:
 
-- wall clock: 120 s
-- tokens: 50k
-- iterations: 100 repro runs
+| Budget | Default | Overridable at Gate 1? |
+|---|---|---|
+| Wall clock | 120 s | yes |
+| Tokens | 50 k | yes |
+| Iterations | 100 repro runs | yes |
 
-Budget exhaustion → `inconclusive` with `budget_consumed` recorded. Inconclusive counts toward "alive" for the refusal-to-fix gate.
+Budget exhausted without a decisive verdict → `inconclusive`, counts as alive, user decides whether to invest more.
 
-## Typical flow
+---
 
-Default (gated):
+## Design notes
 
-```
-/god-of-debugger "orders API returns 500 when cart is empty"
+- **The quality of this plugin is the quality of `skills/debug/SKILL.md`.** That prompt is the hypothesis-generation engine. Everything else is plumbing.
+- **The adversary pass** exists because the model is trained heavily on code and will under-generate config/env/deploy/"premise is wrong" hypotheses. A dedicated adversarial subagent is the cheapest correction.
+- **Verdict schemas are strict JSON** — the orchestrator parses mechanically so it can't be talked into a wrong conclusion mid-session.
+- **Pre-registered kill/survive conditions** are frozen before execution. If they drift after the fact, the system is no longer falsifying, it's rationalizing.
+- **`inconclusive` is first-class.** Forcing `killed`/`survived` on ambiguous output is the failure mode this plugin exists to prevent.
+- **v0.1 ships experiment types 1–3** (log probe, assertion, unit test). Types 4–6 (git bisect, dependency pin, environment toggle) land in v0.2.
+- **Telemetry is local-only.** Fix commits get a `God-Of-Debugger-Session: <id>` trailer; a reporting script (v0.2) walks git history to compute held/reverted/amended/regressed per session. No network calls, ever.
 
-# → establishes repro (18/20 hits)
-# → localizes bug, emits 7 primary + 2 adversarial hypotheses
-# → Gate 1:  Found 9 hypotheses (7 primary, 2 adversarial). [Enter] run all · [e] edit · [s] skip review →
-# [Enter]
-# → 9 subagents run in parallel, writing to .god-of-debugger/experiments/<Hn>/
-# → Gate 2:  3 survived. [Enter] see details · [f] propose fix · [m] more experiments →
-# [m]
-# → tightens experiments for H3, H4, H6, re-runs
-# → Gate 2:  1 survived. [Enter] see details · [f] propose fix · [m] more experiments →
-# [f]
-# → proposes fix for H3, writes code
-# → silently promotes H3 experiment → regression test
-# → Added 1 regression test to tests/.
-```
+---
 
-Autopilot (`--yolo`):
-
-```
-/god-of-debugger --yolo --repro "pytest -k test_checkout" "orders API returns 500 when cart is empty"
-
-# → runs end-to-end with no prompts
-# → prints final survival table
-# → if exactly 1 survived: writes fix + regression test, closes session
-# → if != 1 survived: prints the §5.4 refusal and stops (correctness over speed)
-```
-
-## Directory layout
+## Plugin layout
 
 ```
 god-of-debugger/
 ├── .claude-plugin/plugin.json
+├── commands/
+│   └── auto.md                  single entry command, orchestrates everything
 ├── skills/
-│   ├── repro/SKILL.md      establish deterministic repro + session state
-│   ├── debug/SKILL.md      localization + hypothesis generation + adversarial expansion
-│   ├── run/SKILL.md        parallel execution orchestration
-│   └── promote/SKILL.md    regression test + post-fix verify + telemetry trailer
+│   ├── repro/SKILL.md           repro bootstrap + session state
+│   ├── debug/SKILL.md           localization + hypothesis generation
+│   ├── run/SKILL.md             parallel execution
+│   └── promote/SKILL.md         auto + manual regression-test promotion
 ├── agents/
 │   ├── adversary.md
 │   ├── hypothesis-runner.md
-│   └── bisect-runner.md
+│   └── bisect-runner.md         (v0.2)
 ├── hooks/
 │   ├── hooks.json
 │   └── guard-ship-the-fix.sh
 └── README.md
 ```
 
-## Design notes
-
-- **The quality of this plugin is the quality of `skills/debug/SKILL.md`.** Iterate there first.
-- The highest-leverage extension is the adversarial pass. It exists to catch config/env/deployment/"premise is wrong" failures that a code-biased model will under-generate.
-- Subagent output schemas are strict JSON on purpose — the orchestrator parses verdicts mechanically so it can't be "talked into" a wrong conclusion.
-- Pre-registered `kill_condition` / `survive_condition` are part of the protocol, not commentary. If those drift after execution, the system is no longer falsifying.
-- `inconclusive` is a first-class verdict. Forcing a `killed`/`survived` call on ambiguous output is the failure mode this plugin exists to prevent.
-- MVP ships experiment types 1–3 (probe, assertion, test). Types 4–6 (bisect, dep-pin, env-toggle) are parked until v0.2.
-- Token-efficiency is driven first by localization, then by cheap-first experiments, then by prompt caching / model routing. Measure actual cost in `session.cost_log` before optimizing deeper.
-- Telemetry is local-only: commit trailers in git, no network calls. A reporting script that walks history for `held/reverted/amended/regressed` outcomes ships in v0.2.
+---
 
 ## License
 
