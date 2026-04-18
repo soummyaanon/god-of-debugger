@@ -23,11 +23,15 @@ Senior engineers debug by **elimination**. Enumerate what could be wrong, design
 ## Install
 
 ```bash
-# Local development
-claude --plugin-dir ./god-of-debugger
+claude plugin marketplace add soummyaanon/god-of-debugger
+claude plugin install god-of-debugger@god-of-debugger-marketplace
+```
 
-# Or from a marketplace once published
-/plugin install god-of-debugger
+Or from inside a Claude Code session:
+
+```
+/plugin marketplace add soummyaanon/god-of-debugger
+/plugin install god-of-debugger@god-of-debugger-marketplace
 ```
 
 ---
