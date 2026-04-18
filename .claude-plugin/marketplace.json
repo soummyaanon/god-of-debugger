@@ -1,0 +1,29 @@
+{
+  "name": "god-of-debugger-marketplace",
+  "owner": {
+    "name": "Soumya Ranjan Panda",
+    "email": "medstealth@gmail.com"
+  },
+  "metadata": {
+    "description": "Marketplace hosting the god-of-debugger plugin: falsification-first, hypothesis-driven parallel debugging for Claude Code.",
+    "version": "0.2.0"
+  },
+  "plugins": [
+    {
+      "name": "god-of-debugger",
+      "source": "./plugins/god-of-debugger",
+      "description": "Hypothesis-driven parallel debugging. Generates multiple competing hypotheses, runs experiments in parallel subagents, and only ships a fix when exactly one hypothesis survives.",
+      "version": "0.2.0",
+      "author": {
+        "name": "Soumya Ranjan Panda",
+        "email": "medstealth@gmail.com"
+      },
+      "homepage": "https://github.com/soummyaanon/god-of-debugger",
+      "repository": "https://github.com/soummyaanon/god-of-debugger",
+      "license": "MIT",
+      "keywords": ["debugging", "falsification", "scientific-method", "hypothesis-testing", "regression-tests", "parallel-agents"],
+      "category": "debugging",
+      "tags": ["debug", "test", "hypothesis"]
+    }
+  ]
+}
