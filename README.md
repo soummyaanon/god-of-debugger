@@ -2,6 +2,8 @@
 
 A Claude Code plugin marketplace hosting **`god-of-debugger`**: falsification-first, hypothesis-driven parallel debugging.
 
+**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger)
+
 > Full plugin docs: **[`plugins/god-of-debugger/README.md`](plugins/god-of-debugger/README.md)**
 
 ---

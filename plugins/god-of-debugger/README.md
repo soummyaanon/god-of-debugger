@@ -4,6 +4,8 @@
 
 > One command. One paste. Enter to keep going.
 
+**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger)
+
 ---
 
 ## Why
