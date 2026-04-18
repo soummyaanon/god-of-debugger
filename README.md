@@ -57,4 +57,4 @@ Version is declared in `plugins/god-of-debugger/.claude-plugin/plugin.json` (the
 
 ## License
 
-MIT. See the plugin directory.
+MIT. See [`LICENSE`](LICENSE).

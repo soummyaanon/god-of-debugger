@@ -279,4 +279,4 @@ The four skills are internal steps of `/god-of-debugger`, not separate slash com
 
 ## License
 
-MIT
+MIT. See [`LICENSE`](../../LICENSE) in the repository root for the full text.
