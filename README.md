@@ -55,6 +55,12 @@ The root holds the **marketplace**. The `plugins/god-of-debugger/` directory hol
 
 Version is declared in `plugins/god-of-debugger/.claude-plugin/plugin.json` (the manifest wins per official docs). Bump it there, tag the commit, push.
 
+## Community
+
+- [Contributing](CONTRIBUTING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).

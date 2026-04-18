@@ -280,3 +280,7 @@ The four skills are internal steps of `/god-of-debugger`, not separate slash com
 ## License
 
 MIT. See [`LICENSE`](../../LICENSE) in the repository root for the full text.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) in the repository root.
