@@ -1,53 +1,85 @@
-# god-of-debugger — marketplace
+# god-of-debugger
 
-A Claude Code plugin marketplace hosting **`god-of-debugger`**: falsification-first, hypothesis-driven parallel debugging.
+[![npm version](https://img.shields.io/npm/v/%40bixai%2Fgod-of-debugger?style=flat-square&logo=npm&label=npm&color=cb3837)](https://www.npmjs.com/package/@bixai/god-of-debugger)
+[![Node.js](https://img.shields.io/node/v/%40bixai%2Fgod-of-debugger?style=flat-square&logo=node.js&label=Node&color=339933)](https://github.com/soummyaanon/god-of-debugger)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger)
+**Falsification-first, hypothesis-driven parallel debugging** for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
-> Full plugin docs: **[`plugins/god-of-debugger/README.md`](plugins/god-of-debugger/README.md)**
+**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger) · **Plugin docs:** [`plugins/god-of-debugger/README.md`](plugins/god-of-debugger/README.md)
 
 ---
 
-## Install
+## How it works
+
+1. **You describe the bug** (repro, logs, expected vs actual).
+2. The plugin **generates competing hypotheses** across different causal axes—not one “best guess.”
+3. **`hypothesis-runner` subagents run in parallel**, each executing one falsifiable experiment and returning a strict verdict: killed, survived, or inconclusive.
+4. Results roll up into a **survival table** so you see what evidence actually supports.
+5. When you ship a fix, **guards and promote flows** help turn surviving experiments into regression coverage instead of one-off debugging.
+
+Think: *scientific method + parallel agents*, not a single linear “try this, try that” chat.
+
+---
+
+## Install (npm — recommended)
+
+Install the CLI globally, sync the plugin into Claude Code, then **restart Claude Code** so the plugin loads.
+
+```bash
+npm i -g @bixai/god-of-debugger
+god install
+```
+
+After restart, invoke the workflow from Claude Code with:
+
+```text
+/god-of-debugger:go
+```
+
+### Other package managers
+
+Same flow: global install → `god install` → restart Claude Code.
+
+| Manager | Command |
+|--------|---------|
+| **pnpm** | `pnpm add -g @bixai/god-of-debugger && god install` |
+| **yarn** | `yarn global add @bixai/god-of-debugger && god install` |
+| **bun** | `bun add -g @bixai/god-of-debugger && god install` |
+
+### No global install (`npx`)
+
+```bash
+npx @bixai/god-of-debugger install
+```
+
+Still **restart Claude Code** after `install` so the plugin is picked up.
+
+### CLI maintenance
+
+| Command | What it does |
+|---------|----------------|
+| `god update` | Refresh the installed plugin from the package |
+| `god uninstall` | Remove the plugin from Claude Code |
+| `god doctor` | Quick health check |
+
+---
+
+## Install (Claude marketplace)
+
+If you prefer the marketplace flow instead of npm:
 
 ```bash
 claude plugin marketplace add soummyaanon/god-of-debugger
 claude plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
-Or inside a Claude Code session:
+In a Claude Code session:
 
-```
+```text
 /plugin marketplace add soummyaanon/god-of-debugger
 /plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
-
-Then:
-
-```
-/god-of-debugger <paste your bug here>
-```
-
----
-
-## Repo layout
-
-```
-.
-├── .claude-plugin/
-│   └── marketplace.json          # marketplace catalog (what `marketplace add` reads)
-└── plugins/
-    └── god-of-debugger/          # the plugin itself
-        ├── .claude-plugin/
-        │   └── plugin.json       # plugin manifest
-        ├── commands/             # /god-of-debugger slash command
-        ├── skills/               # debug / repro / run / promote
-        ├── agents/               # hypothesis-runner, adversary, bisect-runner
-        ├── hooks/                # guard-ship-the-fix (PreToolUse)
-        └── README.md             # full plugin documentation
-```
-
-The root holds the **marketplace**. The `plugins/god-of-debugger/` directory holds the **plugin**. They are separate things the docs keep conflating — this repo keeps them in their own folders.
 
 ---
 
