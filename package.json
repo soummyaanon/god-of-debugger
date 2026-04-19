@@ -1,0 +1,48 @@
+{
+  "name": "@bixai/god-of-debugger",
+  "version": "0.4.0",
+  "description": "Hypothesis-driven parallel debugging plugin for Claude Code. Generates competing hypotheses, runs experiments in parallel subagents, ships a fix only when exactly one survives.",
+  "bin": {
+    "god": "./bin/cli.js",
+    "god-of-debugger": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "plugins/god-of-debugger"
+  ],
+  "scripts": {
+    "sync-version": "node lib/sync-version.js",
+    "prepublishOnly": "npm run sync-version"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "plugin",
+    "debugger",
+    "debugging",
+    "hypothesis",
+    "agents",
+    "ai"
+  ],
+  "author": {
+    "name": "Soumyaranjan Panda",
+    "email": "soumyaranjanpanda910@gmail.com"
+  },
+  "license": "MIT",
+  "homepage": "https://godofdebugger.bixai.dev/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soummyaanon/god-of-debugger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/soummyaanon/god-of-debugger/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
