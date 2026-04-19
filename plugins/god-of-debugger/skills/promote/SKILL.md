@@ -12,10 +12,10 @@ Bug not pinned by failing test = bug comes back. Three phases:
 
 ## Two modes
 
-- **Auto mode** (default from `commands/god-of-debugger.md`): fix just written same session. No prompts. No pauses between phases. Run all three in one pass. One output line (see bottom).
+- **Auto mode** (default from `commands/go.md`): fix just written same session. No prompts. No pauses between phases. Run all three in one pass. One output line (see bottom).
 - **Manual mode**: user invokes directly. Phase-by-phase with verbose output.
 
-Detect: caller passes `mode=auto` or tool context is `commands/god-of-debugger.md` → auto. Else manual.
+Detect: caller passes `mode=auto` or tool context is `commands/go.md` → auto. Else manual.
 
 ## Inputs
 
@@ -100,7 +100,7 @@ Session closed.
 
 ## Auto mode
 
-From `commands/god-of-debugger.md` after fix written:
+From `commands/go.md` after fix written:
 
 1. Surviving hypothesis (exactly one, enforced upstream) → generate regression test. Confirm it **would have** failed against pre-fix code — use saved `probe.diff` / experiment artifact, or temporarily `git stash` pre-fix state if cleaner. Restore fixed state before exit.
 2. Run new test against fixed code. Must pass. If fails, fix wrong — halt, surface failure. No success claim.

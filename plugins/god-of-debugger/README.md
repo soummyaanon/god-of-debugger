@@ -43,7 +43,7 @@ Or from inside a Claude Code session:
 One command. That's the whole surface.
 
 ```bash
-/god-of-debugger <paste your bug here>
+/god-of-debugger:go <paste your bug here>
 ```
 
 End-to-end, this runs:
@@ -83,7 +83,7 @@ Default = Enter = keep going. Power users intervene with one keypress. `--yolo` 
 ## Walkthrough: "My checkout API throws 500s under load. Sometimes."
 
 ```bash
-/god-of-debugger "intermittent 500s on /api/checkout under load"
+/god-of-debugger:go "intermittent 500s on /api/checkout under load"
 ```
 
 **Repro.** The plugin detects your test framework, proposes a repro command, and locks it in at the measured hit rate.
@@ -174,7 +174,7 @@ This plugin is **slower per bug on purpose**. It trades per-iteration speed for 
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                    /god-of-debugger <bug>                              │
+│                    /god-of-debugger:go <bug>                           │
 └────────────────────────────┬───────────────────────────────────────────┘
                              │
          ┌───────────────────┼───────────────────┐
@@ -265,7 +265,7 @@ god-of-debugger/
 └── README.md
 ```
 
-The four skills are internal steps of `/god-of-debugger`, not separate slash commands. They run automatically in order; you only ever type the one command.
+The four skills are internal steps of `/god-of-debugger:go`, not separate slash commands. They run automatically in order; you only ever type the one command.
 
 ---
 

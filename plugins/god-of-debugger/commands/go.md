@@ -12,7 +12,7 @@ Raw args: `$ARGUMENTS`
 - `--yolo` present → `YOLO=true`, strip.
 - `--repro "<cmd>"` present → extract into `REPRO_CMD`, strip.
 - Rest = `BUG`.
-- `BUG` empty → print usage `/god-of-debugger [--yolo] [--repro "<cmd>"] <bug>` and stop.
+- `BUG` empty → print usage `/god-of-debugger:go [--yolo] [--repro "<cmd>"] <bug>` and stop.
 
 Echo parsed state as **exactly** this 3-line block. Nothing else:
 

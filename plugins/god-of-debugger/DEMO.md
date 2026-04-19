@@ -1,4 +1,4 @@
-# Live demo — `/god-of-debugger` end to end
+# Live demo — `/god-of-debugger:go` end to end
 
 Walkthrough of one real run. Bug: an auth test goes flaky about 1 in 50 runs. No stack trace, no reliable repro. This is the kind of thing people normally "fix" by adding a retry and forgetting.
 
@@ -9,7 +9,7 @@ Session transcript below is lightly trimmed. `>` lines are user input.
 ## 0. Invoke
 
 ```
-> /god-of-debugger test auth/session_test.py::test_refresh_near_expiry is flaky,
+> /god-of-debugger:go test auth/session_test.py::test_refresh_near_expiry is flaky,
   passes most of the time, fails ~1 in 50 with "token expired" even though we just refreshed it
 ```
 
@@ -169,13 +169,13 @@ This is the feature. A single-survivor fix is a fix you can defend at a code rev
 
 ```bash
 # Full pipeline (what the transcript shows)
-/god-of-debugger <bug>
+/god-of-debugger:go <bug>
 
 # Skip both gates — CI-style autonomous run
-/god-of-debugger --yolo <bug>
+/god-of-debugger:go --yolo <bug>
 
 # Skip repro bootstrap; you already have one
-/god-of-debugger --repro "pytest auth/session_test.py::test_refresh_near_expiry" <bug>
+/god-of-debugger:go --repro "pytest auth/session_test.py::test_refresh_near_expiry" <bug>
 ```
 
 Fix-refusal (step 7 gate on survivor count) applies even with `--yolo`. That one never turns off.
