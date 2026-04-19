@@ -12,14 +12,14 @@ A Claude Code plugin marketplace hosting **`god-of-debugger`**: falsification-fi
 
 ```bash
 claude plugin marketplace add soummyaanon/god-of-debugger
-claude plugin install god-of-debugger@god-of-debugger-marketplace
+claude plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
 Or inside a Claude Code session:
 
 ```
 /plugin marketplace add soummyaanon/god-of-debugger
-/plugin install god-of-debugger@god-of-debugger-marketplace
+/plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
 Then:

@@ -26,14 +26,14 @@ Senior engineers debug by **elimination**. Enumerate what could be wrong, design
 
 ```bash
 claude plugin marketplace add soummyaanon/god-of-debugger
-claude plugin install god-of-debugger@god-of-debugger-marketplace
+claude plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
 Or from inside a Claude Code session:
 
 ```
 /plugin marketplace add soummyaanon/god-of-debugger
-/plugin install god-of-debugger@god-of-debugger-marketplace
+/plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
 ---
