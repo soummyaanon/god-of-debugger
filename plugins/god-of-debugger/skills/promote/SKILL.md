@@ -1,76 +1,76 @@
 ---
-description: Internal step of /god-of-debugger. Converts surviving debugging experiments into permanent regression tests and tags the fix commit with the session id. Invoked automatically by the main command after a fix is accepted; runs silently with no prompts.
+description: Internal step of /god-of-debugger. Converts surviving debugging experiments into permanent regression tests. Tags fix commit with session id. Invoked after fix accepted. Silent, no prompts.
 ---
 
-# Promote — Experiment → Regression Test (+ Telemetry)
+# Promote — experiment → regression test (+ telemetry)
 
-A bug that isn't pinned by a failing test will come back. This skill does three things, in order:
+Bug not pinned by failing test = bug comes back. Three phases:
 
-1. Convert the surviving experiment into a permanent regression test that fails **now**, before the fix.
-2. After the fix lands, re-run every surviving experiment to confirm the verdict flips (fail → pass). Only experiments that actually flip get promoted.
-3. Append a `God-Of-Debugger-Session: <session_id>` trailer to the fix commit so future regression auditing can find it.
+1. Surviving experiment → permanent regression test that fails **now** (pre-fix).
+2. After fix lands, re-run every surviving experiment. Verdict must flip (fail → pass). Only flipped ones promoted.
+3. Append `God-Of-Debugger-Session: <session_id>` trailer to fix commit.
 
-## Two invocation modes
+## Two modes
 
-- **Auto mode (default when called from `commands/auto.md`).** The fix has just been written in the same session. Do not prompt the user. Do not pause between phases. Run all three phases in one pass and emit exactly one output line (the "auto mode output" section at the bottom).
-- **Manual mode.** The user invokes the skill directly, usually between writing the fix and committing it. Run phase-by-phase with the prompts and the verbose output shown below.
+- **Auto mode** (default from `commands/god-of-debugger.md`): fix just written same session. No prompts. No pauses between phases. Run all three in one pass. One output line (see bottom).
+- **Manual mode**: user invokes directly. Phase-by-phase with verbose output.
 
-Detect the mode: if the caller passes `mode=auto` or the current tool context is `commands/auto.md`, use auto mode. Otherwise manual.
+Detect: caller passes `mode=auto` or tool context is `commands/god-of-debugger.md` → auto. Else manual.
 
 ## Inputs
 
 1. `.god-of-debugger/current` → `session_id`.
-2. `.god-of-debugger/sessions/<session_id>.json` → must have exactly one entry in `survivors`.
+2. `.god-of-debugger/sessions/<session_id>.json` → **exactly one** entry in `survivors`.
 
-If `survivors.length != 1`, STOP. Promotion is only valid when the root cause is locked in.
+`survivors.length != 1` → STOP. Promotion only valid when root cause locked in.
 
-## Phase 1 — Write the regression test (pre-fix)
+## Phase 1 — write regression test (pre-fix)
 
-1. **Detect the test framework.** Look for `package.json`, `pytest.ini`/`pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`, etc. Match existing style — file location, naming, assertion library. Do not introduce a new framework.
-2. **Find the right test file.** Prefer co-locating with the code under test or with existing tests for the same module. Never create a new top-level `tests/` if one already exists elsewhere.
-3. **Write the test.** It must:
-   - Reproduce the exact failure condition the surviving experiment exposed.
-   - Assert on the *specific observable* from `experiment.expected_if_true` — not a generic "no crash".
-   - Carry a comment with: bug summary, `session_id`, `hypothesis.id`, `hypothesis.claim`.
-   - Fail right now, against unfixed code.
-4. **Run the test.** Confirm it fails with output matching the original bug. If it passes, the test is wrong — rewrite until it captures the actual failure mode.
-5. **Record** the test path in `session.regression_test`.
-6. Tell the user: **"Regression test added and confirmed failing at `<path>::<name>`. Implement the fix. Re-run this skill after the fix to complete promotion."**
+1. **Detect framework.** Check `package.json`, `pytest.ini`/`pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`, etc. Match existing style (file location, naming, assertion lib). No new framework.
+2. **Right test file.** Prefer co-locate with code under test or existing tests for same module. Never new top-level `tests/` if one exists elsewhere.
+3. **Write test.** Must:
+   - Reproduce exact failure from surviving experiment.
+   - Assert on specific observable from `experiment.expected_if_true` — not generic "no crash".
+   - Carry comment: bug summary, `session_id`, `hypothesis.id`, `hypothesis.claim`.
+   - Fail now against unfixed code.
+4. **Run test.** Confirm fail matching original bug. If passes, test wrong — rewrite until captures real failure.
+5. **Record** path in `session.regression_test`.
+6. Tell user: **"Regression test added, failing at `<path>::<name>`. Implement fix. Re-run skill after fix."**
 
-## Phase 2 — Post-fix verification
+## Phase 2 — post-fix verification
 
-Triggered when the user re-invokes `/god-of-debugger:promote` after committing/staging a fix.
+Triggered on re-invoke of `/god-of-debugger:promote` after fix committed/staged.
 
-1. Run the regression test. It must now pass. If it still fails, the fix is incomplete — halt.
-2. Re-run the surviving experiment using its artifact at `.god-of-debugger/experiments/<Hn>/experiment.md`. Expected: verdict flips to `killed` (the hypothesis that used to survive is now falsified, because the fix removed its cause).
-   - If it flips → experiment is genuinely promoted.
-   - If it still survives → the fix does not actually address the cause the hypothesis identified. Halt, tell the user.
-3. Revert every `probe.diff` under `.god-of-debugger/experiments/*/probe.diff` that hasn't already been reverted. Leave the tree clean except for the promoted regression test.
-4. Mark `session.status = "closed"` and `session.closed_at` in the state file. Delete `.god-of-debugger/current`.
+1. Run regression test. Must pass. Still fails → fix incomplete. Halt.
+2. Re-run surviving experiment from `.god-of-debugger/experiments/<Hn>/experiment.md`. Verdict must flip to `killed` (hypothesis that survived now falsified — fix removed cause).
+   - Flipped → promote.
+   - Still survived → fix doesn't address cause. Halt. Tell user.
+3. Revert every `probe.diff` under `.god-of-debugger/experiments/*/probe.diff` not yet reverted. Tree clean except promoted test.
+4. `session.status = "closed"`. `session.closed_at`. Delete `.god-of-debugger/current`.
 
-## Phase 3 — Telemetry trailer
+## Phase 3 — telemetry trailer
 
-If the fix has not yet been committed, prompt the user to stage files and write the commit with this trailer appended:
+Fix not committed yet → prompt user stage + write commit with trailer:
 
 ```
 God-Of-Debugger-Session: <session_id>
 ```
 
-If a commit already exists, offer `git commit --amend --no-edit` only if the user explicitly consents — do not amend published commits without approval.
+Commit exists → offer `git commit --amend --no-edit` **only** with explicit consent. Never amend published commits without approval.
 
-Record `session.fix_commit_sha` in state.
+Record `session.fix_commit_sha`.
 
 ## Hard rules
 
-- Phase 1: test-only changes. No production edits. The hook would block them anyway.
+- Phase 1: test-only changes. No production edits. Hook blocks anyway.
 - Phase 2: no new code. Only re-run.
-- Do not mark the test as `skip`/`xfail`/`pending`. A failing test is the entire point.
-- Do not assert on incidental details (timestamps, memory addresses, log formatting) unless those *are* the bug.
-- Never force-push, never amend published commits without explicit consent.
+- Never mark test `skip`/`xfail`/`pending`. Failing test = entire point.
+- No asserts on incidental details (timestamps, memory addresses, log formatting) unless those **are** the bug.
+- Never force-push. Never amend published commits w/o consent.
 
-## Test naming convention
+## Test naming
 
-Name encodes the behavior, not the fix. Good:
+Encode behavior, not fix. Good:
 
 - `it("returns empty array instead of null when user has no orders (regression: H2)")`
 - `test_cache_eviction_does_not_leak_keys_after_ttl_expiry`
@@ -80,48 +80,48 @@ Bad:
 - `it("works")`
 - `test_fix_for_bug_123`
 
-## Output (phase 1)
+## Output — phase 1
 
 ```
 Regression test: <path/to/test>::<test_name>
 Status:          FAILING (as expected)
 Session:         <session_id>
-Next:            implement the fix, commit, then re-run /god-of-debugger:promote.
+Next:            implement fix, commit, re-run /god-of-debugger:promote.
 ```
 
-## Output (phase 2 + 3)
+## Output — phase 2 + 3
 
 ```
 Regression test: PASSING
-Surviving experiment: FLIPPED to killed (fix removed the cause)
-Fix commit:      <sha> (trailer added: God-Of-Debugger-Session: <session_id>)
+Surviving experiment: FLIPPED to killed (fix removed cause)
+Fix commit:      <sha> (trailer: God-Of-Debugger-Session: <session_id>)
 Session closed.
 ```
 
 ## Auto mode
 
-When invoked from `commands/auto.md` after a fix has been written:
+From `commands/god-of-debugger.md` after fix written:
 
-1. For the surviving hypothesis (there is exactly one, enforced upstream), generate the regression test and confirm it **would have** failed against the pre-fix code — use the saved `probe.diff` / experiment artifact as the source of the failure signal, or temporarily check out the pre-fix state with `git stash` if that is cleaner. Restore the fixed state before exiting.
-2. Run the new test against the fixed code. It must pass. If it fails, the fix is wrong — halt and surface the failure; do not claim success.
+1. Surviving hypothesis (exactly one, enforced upstream) → generate regression test. Confirm it **would have** failed against pre-fix code — use saved `probe.diff` / experiment artifact, or temporarily `git stash` pre-fix state if cleaner. Restore fixed state before exit.
+2. Run new test against fixed code. Must pass. If fails, fix wrong — halt, surface failure. No success claim.
 3. Revert every un-promoted `probe.diff` under `.god-of-debugger/experiments/*/probe.diff`.
-4. Append the `God-Of-Debugger-Session: <session_id>` trailer to the fix commit. If the fix has not been committed yet, leave a message for the next commit instead of amending.
-5. Mark `session.status = "closed"`, `session.closed_at = now`, record `session.regression_tests = [<paths>]`.
+4. Append `God-Of-Debugger-Session: <session_id>` trailer to fix commit. If not committed yet, leave message for next commit. No auto-amend.
+5. `session.status = "closed"`. `session.closed_at = now`. `session.regression_tests = [<paths>]`.
 
-Do not prompt during any of this. Do not print phase headers.
+No prompts. No phase headers.
 
-### Auto mode output (exactly one line)
+### Auto mode output — **exactly one line**
 
-On success:
+Success:
 
 ```
 Added <N> regression tests to <detected-dir>/.
 ```
 
-On failure (test didn't flip, fix incomplete, or framework not detected):
+Failure (test didn't flip, fix incomplete, framework not detected):
 
 ```
-No regression tests added — <reason in 6 words or fewer>. Session: <session_id>.
+No regression tests added — <reason in ≤6 words>. Session: <session_id>.
 ```
 
-The caller (`commands/auto.md`) relies on this being a single line. Do not add decoration.
+Caller relies on single line. No decoration.

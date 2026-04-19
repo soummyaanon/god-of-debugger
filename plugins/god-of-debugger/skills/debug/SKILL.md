@@ -1,163 +1,162 @@
 ---
-description: Internal step of /god-of-debugger. Localizes the bug and generates multiple competing hypotheses spanning distinct causal axes, then designs a falsifiable experiment for each. Invoked automatically by the main command after repro is established.
+description: Internal step of /god-of-debugger. Localizes bug, generates competing hypotheses across distinct causal axes, designs falsifiable experiment per hypothesis. Invoked after repro. Caveman tone.
 ---
 
-# Debug — Hypothesis Generation, Adversarial Expansion, and Experiment Design
+# Debug — hypothesis generation + adversarial pass + experiment design
 
-You are not here to guess. You are here to **think like a scientist**.
+Think scientist, not guesser. Two worst failure modes:
 
-The single most expensive failure mode in debugging is latching onto the first plausible explanation and "fixing" it. That fix often papers over the real bug, or worse, introduces a new one. This skill exists to prevent that.
+1. Latch onto first plausible fix. Papers over real bug.
+2. Polished but biased hypothesis set. Miss real category.
 
-The second-most-expensive failure mode is generating a polished but incomplete hypothesis set that is biased toward code bugs and misses the real category entirely. This skill explicitly counters that with an adversarial pass.
+Adversarial pass counters #2.
 
 ## Pre-flight: repro must exist
 
-Before generating hypotheses, read `.god-of-debugger/current` and load the session file at `.god-of-debugger/sessions/<session_id>.json`.
+Read `.god-of-debugger/current`. Load `.god-of-debugger/sessions/<session_id>.json`.
 
-- If no session exists, or `session.repro.command` is missing, STOP and tell the user: **"No repro in session state. Run `/god-of-debugger:repro` first."**
-- If `session.status == "repro_unstable"`, STOP and tell the user to harden the repro.
-- Otherwise, proceed with the loaded repro.
+- No session / `repro.command` missing → STOP. Say: **"No repro. Run `/god-of-debugger:repro` first."**
+- `status == "repro_unstable"` → STOP. Harden repro.
+- Else proceed.
 
-## The contract
+## Contract
 
-Given a bug report (from `$ARGUMENTS` or session state), you MUST:
+From bug (from `$ARGUMENTS` or session):
 
-1. **Localize the bug first** to 2–5 likely files, functions, or modules. Subagents do not get the whole repo by default.
-2. **Generate 5–8 primary competing hypotheses**, spanning at least **4 of the 7 causal axes** below. Mono-axis hypothesis sets are rejected — a set of 7 null-check variants is not 7 hypotheses.
-3. **Run the adversary pass** after the primary list. The adversary sees the primary list and must add **2–3 hypotheses from categories not already well covered**, especially config/env, deployment, human error, upstream/downstream, and "the premise is wrong".
-4. **For each hypothesis, design ONE falsification experiment** from the allowed types (see §Experiment types). The experiment's output must unambiguously kill or spare the hypothesis.
-5. **Pre-register the falsification condition before execution.** Every hypothesis must state exactly what observation kills it and what observation lets it survive.
-6. **Write hypotheses into session state** (`session.hypotheses`), each tagged with `axis`, `origin`, `relevant_files`, and experiment spec.
-7. **Emit the strict JSON block** the `run` skill consumes.
-8. **Do NOT propose a fix.** Fixes come after exactly one hypothesis survives. The `ship-the-fix` hook will block you if you try.
+1. **Localize** to 2–5 files/functions/modules. Subagents never get whole repo.
+2. **5–8 primary hypotheses**. Cover ≥4 of 7 axes. Reject mono-axis sets (7 null-check variants ≠ 7 hypotheses).
+3. **Adversary pass** after primary. Adds 2–3 hypotheses in uncovered categories. Must label `origin: adversarial`.
+4. **One falsification experiment per hypothesis** (types 1–3). Output must unambiguously kill or spare.
+5. **Pre-register kill/survive conditions** before execution. Runners cannot rewrite after seeing output.
+6. **Write to session.hypotheses** with `axis`, `origin`, `relevant_files`, experiment spec.
+7. **Emit strict JSON block** (schema below) — `run` skill parses it.
+8. **No fix.** Wrong phase. `ship-the-fix` hook blocks anyway.
 
-## The 7 causal axes
+## 7 causal axes
 
-Every hypothesis must carry exactly one axis tag:
+Each hypothesis carries exactly one:
 
-| Axis | Examples |
+| Axis | Example |
 |---|---|
-| `data` | null/zero/empty/malformed value flows through a function that assumes otherwise |
-| `control-flow` | early return, wrong branch, missing `else`, unreachable code |
-| `concurrency` | race, deadlock, lost update, publication without happens-before |
-| `config` | feature flag, env var, YAML/TOML key flipped or missing |
-| `deps` | library version bump, transitive pin, API contract change |
-| `env` | OS/runtime/locale difference, network topology, resource limit |
-| `contract` | upstream/downstream API returning an unexpected shape, schema drift |
+| `data` | null/empty/malformed flows into fn that assumes otherwise |
+| `control-flow` | early return, wrong branch, missing `else`, unreachable |
+| `concurrency` | race, deadlock, lost update, publication w/o happens-before |
+| `config` | feature flag, env var, YAML key flipped/missing |
+| `deps` | lib version bump, transitive pin, API contract change |
+| `env` | OS/runtime/locale diff, network, resource limit |
+| `contract` | upstream/downstream API shape change, schema drift |
 
-A valid hypothesis set covers at least 4 of these. If you can't reach 4, say so explicitly and ask the user to accept a narrower set — do not fabricate axes to pad the count.
+≥4 axes covered. Can't reach 4 → say so, ask user to accept narrower. No padding.
 
-## Hypothesis origins
-
-Every hypothesis must carry exactly one origin tag:
+## Origins
 
 | Origin | Meaning |
 |---|---|
-| `primary` | Generated by the main hypothesis pass from the localized code and repro |
-| `adversarial` | Generated by the adversary pass to attack category bias and premise mistakes |
+| `primary` | Main pass from localized code + repro |
+| `adversarial` | Attack category bias + premise mistakes |
 
-Adversarial hypotheses are peers once created. The origin tag exists for traceability and user awareness, not for weighting.
+Peers once created. Origin tag = traceability, not weight.
 
-## Hypothesis quality bar
+## Quality bar
 
-A good hypothesis is:
+Good hypothesis:
 
-- **Specific** — names a function, line range, data structure, race window, env var, or commit. Not "something in the database layer".
-- **Causal** — describes a *mechanism*, not a correlation. "X is null because Y returns early on Z" beats "X is sometimes null".
-- **Falsifiable** — you can describe, in one sentence, the observation that would kill it.
-- **Cheap to test** — prefer experiments that run in seconds over ones that need a full deploy.
-- **Localized** — names the minimum file/function surface needed for the runner to work.
+- **Specific** — names fn, line, struct, race window, env var, commit. Not "something in DB layer".
+- **Causal** — mechanism, not correlation. "X null because Y returns early on Z" > "X sometimes null".
+- **Falsifiable** — one-sentence observation that kills it.
+- **Cheap** — prefer seconds over full deploy.
+- **Localized** — min file/fn surface for runner.
 
-### Anti-examples — rejected on sight
+### Rejected on sight
 
-- "Maybe there's a null somewhere." → no location, no predicate, no experiment.
-- "The cache might be wrong." → which cache, what wrong, what would prove it?
-- Seven variants of "the null check on line 42 is off by one." → one axis, not seven hypotheses.
-- "It's a race condition." → asserted without a concrete interleaving.
-- "The library is buggy." → lazy. Have you read the relevant source?
-- "Works on my machine." → not a hypothesis.
-- Any claim containing "maybe", "possibly", "could be". Claims are assertions. You're wrong until the experiment proves you right.
+- "Maybe there's a null somewhere." → no location, no predicate.
+- "Cache might be wrong." → which cache, what wrong, what proves?
+- 7 variants of "null check on line 42 off by one." → one axis.
+- "Race condition." → no interleaving.
+- "Library buggy." → lazy. Read source?
+- "Works on my machine." → not hypothesis.
+- Any "maybe" / "possibly" / "could be". Claims are assertions.
 
-### Good hypothesis, for contrast
+### Good example
 
-> H3 (concurrency): `cart_session` map at `cart/session.go:142` is mutated from the TTL-expiry goroutine (`cart/expiry.go:61`) without holding `sessionMu`. An assertion that the lock is held on every map write will trip within 10k load iterations. Kills: assertion never fires across 10k runs.
+> H3 (concurrency): `cart_session` map at `cart/session.go:142` mutated from TTL-expiry goroutine (`cart/expiry.go:61`) without holding `sessionMu`. Assertion that lock held on every map write trips within 10k load iterations. Kills: assertion never fires across 10k runs.
 
 ## Localization rules
 
-Before you generate hypotheses, identify a narrow working set:
+Before hypotheses, narrow working set:
 
-- Prefer **2–5 relevant files or functions** derived from stack traces, grep hits, repro output, or recent git history.
-- Record them in `session.localization`.
-- Every hypothesis must reference a subset of that working set in `relevant_files`.
-- If a strong adversarial hypothesis points outside the localized set, expand the set deliberately and record why. Do not silently fall back to "entire repo".
+- 2–5 files/fns from stack traces, grep, repro output, recent git.
+- Record in `session.localization`.
+- Every hypothesis references subset in `relevant_files`.
+- Strong adversarial hypothesis points outside set → expand deliberately, record why. Never silent fallback to whole repo.
 
-This is the main token-efficiency lever in the system. Do it first.
+Main token-efficiency lever. Do it first.
 
 ## Adversary pass
 
-After the primary hypothesis list is drafted, invoke the `adversary` agent with:
+After primary list, invoke `adversary` agent with:
 
-- the bug summary
-- repro command and hit rate
-- the localized file list
-- the primary hypotheses already generated
-- explicit instruction to avoid categories already covered unless the gap is substantive
+- bug summary
+- repro command + hit rate
+- localized file list
+- primary hypotheses
+- explicit: avoid categories already covered unless gap substantive
 
-The adversary prompt is, in spirit:
+Adversary stance:
 
-> "The list above is probably wrong or incomplete. What hypothesis is NOT on this list that a senior engineer would generate? What's the most embarrassing thing it could be — the cause you'd be ashamed to have missed?"
+> "List above probably wrong or incomplete. What hypothesis NOT on list would senior engineer generate? Most embarrassing thing it could be?"
 
-The adversary should preferentially search for:
+Adversary searches preferentially:
 
 - config / env / deployment mistakes
-- human error (wrong file, wrong branch, stale build, wrong image, wrong env var)
-- upstream / downstream faults outside the visible code path
-- "the premise is wrong" cases (broken test, bad bug report, invalid repro)
+- human error (wrong file, branch, stale build, image, env var)
+- upstream/downstream faults outside visible code
+- premise-wrong (broken test, bad report, invalid repro)
 
-Merge the adversarial hypotheses into `session.hypotheses` and label them clearly. The user must be able to see which ones were adversarial.
+Merge adversarial into `session.hypotheses`. User must see which were adversarial.
 
-## Experiment types (MVP: types 1–3)
+## Experiment types
 
-| Type | Action | Killed when |
-|---|---|---|
-| 1. log probe | Insert a log line at a specific location. Run repro. | Predicted value never appears across N runs. |
-| 2. assertion | Insert a temporary `assert`. Run repro. | Assertion holds across N runs. |
-| 3. unit test | Write a test that fails iff the hypothesis holds. | The test passes. |
-| 4. git bisect *(v0.2)* | Bisect a commit range with a repro-derived check. | Range contains no culprit commit. |
-| 5. dep pin *(v0.2)* | Down/upgrade a specific dependency. | Bug persists across pinned versions. |
-| 6. env toggle *(v0.2)* | Flip a flag/env/config. | Bug is independent of the toggle. |
+| # | Kind | Action | Killed when |
+|---|---|---|---|
+| 1 | log probe | Insert log at location. Run repro. | Predicted value never appears across N runs. |
+| 2 | assertion | Insert temp `assert`. Run repro. | Assertion holds across N runs. |
+| 3 | unit test | Write test that fails iff hypothesis holds. | Test passes. |
+| 4 | git bisect *(v0.2)* | Bisect range with repro-derived check. | Range has no culprit. |
+| 5 | dep pin *(v0.2)* | Down/upgrade dep. | Bug persists across versions. |
+| 6 | env toggle *(v0.2)* | Flip flag/env/config. | Bug independent of toggle. |
 
-v0.1 ships types 1–3. Hypotheses requiring types 4–6 are parked (listed, never "survive") until the corresponding runner exists.
+v0.1 ships 1–3. Hypotheses needing 4–6 parked (listed, never "survive") until runner exists.
 
-## Cheap-first experiment ordering
+## Cheap-first ordering
 
-Prefer the cheapest discriminating experiment first:
+Prefer cheapest discriminating experiment first:
 
-1. `env toggle` / `dep pin` / `log probe`
-2. `assertion`
-3. `unit test`
-4. `git bisect`
+1. env toggle / dep pin / log probe
+2. assertion
+3. unit test
+4. git bisect
 
-If a cheap check can kill a hypothesis quickly, do not escalate immediately to a slower experiment. For parked experiment kinds, still record the cheapest viable plan even if the runner does not exist yet.
+Cheap kill fast → don't escalate. Parked kinds → record cheapest viable plan anyway.
 
 ## Pre-registered falsification conditions
 
-Before any runner touches code, every hypothesis must already contain:
+Every hypothesis MUST contain before any runner runs:
 
-- `kill_condition`: the exact observable outcome that falsifies it
-- `survive_condition`: the exact observable outcome that leaves it alive
+- `kill_condition`: exact observable outcome that falsifies.
+- `survive_condition`: exact observable outcome that leaves alive.
 
-These are not prose decorations. They are the protocol. Runners judge against these pre-registered conditions and are not allowed to rewrite them after seeing the output.
+Protocol, not decoration. Runners judge against these. Cannot rewrite after seeing output.
 
 ## Required output
 
-After reasoning, emit exactly one fenced JSON block:
+After reasoning, emit **exactly one** fenced JSON block:
 
 ```json
 {
   "session_id": "<from session state>",
   "bug": "<one-sentence restatement>",
-  "repro": { "command": "<from session state>", "hit_rate": 0.85 },
+  "repro": { "command": "<from session>", "hit_rate": 0.85 },
   "localization": {
     "relevant_files": ["path/to/file_a", "path/to/file_b"],
     "basis": "stack trace + grep + recent git history"
@@ -170,15 +169,15 @@ After reasoning, emit exactly one fenced JSON block:
       "axis": "concurrency",
       "claim": "<specific causal mechanism with file/line>",
       "relevant_files": ["path/to/file_a", "path/to/file_b"],
-      "predicts": "<observation that would be true if this holds>",
-      "kills_it": "<observation that would falsify it>",
-      "kill_condition": "<pre-registered falsification condition>",
-      "survive_condition": "<pre-registered survival condition>",
+      "predicts": "<obs if true>",
+      "kills_it": "<obs if false>",
+      "kill_condition": "<pre-registered>",
+      "survive_condition": "<pre-registered>",
       "experiment": {
         "kind": "probe | assertion | test",
         "action": "<exact diff, command, or spec>",
-        "expected_if_true": "<what output looks like if H1 is correct>",
-        "expected_if_false": "<what it looks like if H1 is wrong>",
+        "expected_if_true": "<output if H1 correct>",
+        "expected_if_false": "<output if H1 wrong>",
         "budget": { "wall_seconds": 120, "max_tokens": 50000, "iterations": 100 },
         "cost": "cheap | medium | expensive"
       }
@@ -197,29 +196,29 @@ After reasoning, emit exactly one fenced JSON block:
 }
 ```
 
-Also update `session.hypotheses` with the same array so the hook and `run` skill can read it.
+Also update `session.hypotheses` with same array. Hook + `run` skill read it.
 
 ## Workflow
 
-1. Load session state. Confirm repro exists and is not `repro_unstable`.
-2. Localize the bug to 2–5 relevant files/functions. Actually read them; do not infer.
-3. Check recent git history (`git log --oneline -20` on relevant files) for suspicious changes.
-4. Generate primary hypotheses with axis coverage ≥4. Rank by prior probability, not by test cost.
-5. Invoke the `adversary` agent and merge 2–3 non-overlapping adversarial hypotheses.
-6. For every kept hypothesis, pre-register `kill_condition` and `survive_condition` before finalizing the experiment spec.
-7. Design experiments from types 1–3. If the cheapest experiment can't distinguish two hypotheses, design a sharper one.
-8. Write `session.localization`, `session.hypotheses`, and `session.cost_log` scaffolding, then emit the JSON block.
-9. Hand off: **"Hypotheses ready. Run `/god-of-debugger:run` to execute experiments in parallel."**
+1. Load session. Confirm repro exists, not `repro_unstable`.
+2. Localize to 2–5 files. Read them. No inference.
+3. `git log --oneline -20` on relevant files. Look for suspicious commits.
+4. Primary hypotheses, axis coverage ≥4. Rank by prior probability, not test cost.
+5. Invoke `adversary`. Merge 2–3 non-overlapping adversarial.
+6. Every kept hypothesis: pre-register `kill_condition` + `survive_condition` before finalizing experiment.
+7. Design experiments from types 1–3. Cheapest can't discriminate → sharper one.
+8. Write `session.localization`, `session.hypotheses`, `session.cost_log`. Emit JSON.
+9. Hand off: **"Hypotheses ready. Run `/god-of-debugger:run`."**
 
-## Anti-patterns that get you fired
+## Anti-patterns (fireable)
 
-- Emitting <3 hypotheses, or covering <4 axes without flagging it.
-- Handing subagents the whole repo when a localized file set was available.
-- Forgetting the adversarial pass, or merging adversarial hypotheses without an `origin` tag.
-- Writing hypotheses without pre-registered `kill_condition` and `survive_condition`.
-- Proposing the fix in this skill. Wrong skill. Wrong phase.
-- "Maybe", "possibly", "could be" in a claim.
-- Experiments without a distinguishing predicate ("add a log and see what it says").
-- Skipping the session-state read, or writing into a different session.
+- <3 hypotheses or <4 axes without flagging.
+- Whole repo to subagent when localized set existed.
+- Skip adversarial pass. Merge adversarial without `origin` tag.
+- Hypothesis without pre-reg `kill_condition` + `survive_condition`.
+- Propose fix here. Wrong skill. Wrong phase.
+- "Maybe"/"possibly"/"could be" in claim.
+- Experiments without distinguishing predicate ("add log and see").
+- Skip session-state read. Write into wrong session.
 
-Remember: **the quality of this plugin is the quality of this prompt**. Take it seriously.
+Remember: **plugin quality = prompt quality**. Take it seriously.

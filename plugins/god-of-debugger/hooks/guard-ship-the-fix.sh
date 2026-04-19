@@ -60,19 +60,11 @@ survivor_count=$(jq -r '(.survivors // []) | length' "$state_file" 2>/dev/null |
 if [[ "$survivor_count" != "1" ]]; then
   survivors=$(jq -r '(.survivors // []) | join(", ")' "$state_file" 2>/dev/null || echo "")
   {
-    echo "god-of-debugger: BLOCKED edit to production file '$file_path'."
-    echo "Session: $session_id"
-    echo "Reason: $survivor_count hypotheses are currently alive (survivors: [$survivors])."
-    echo ""
-    echo "You may not ship a fix until exactly one hypothesis survives."
-    echo "Next steps:"
-    echo "  1. Design a discriminating experiment for the survivors."
-    echo "  2. Run /god-of-debugger:run again."
-    echo "  3. Once exactly one hypothesis survives, run /god-of-debugger:promote."
-    echo "  4. Then you may edit production code."
-    echo ""
-    echo "Allowlist: test files, .god-of-debugger/**, and files containing a"
-    echo "'@god-of-debugger:probe' marker comment are always editable."
+    echo "god-of-debugger: BLOCKED '$file_path'."
+    echo "Session: $session_id · survivors=$survivor_count [$survivors]"
+    echo "Fix only when exactly 1 hypothesis survives."
+    echo "Next: design discriminating experiment → /god-of-debugger:run → /god-of-debugger:promote."
+    echo "Allowlist: tests, .god-of-debugger/**, files with '@god-of-debugger:probe' marker."
   } >&2
   exit 2
 fi

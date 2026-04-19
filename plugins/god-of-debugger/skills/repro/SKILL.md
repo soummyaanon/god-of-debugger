@@ -1,31 +1,31 @@
 ---
-description: Internal step of /god-of-debugger. Establishes or verifies a deterministic reproduction command before hypothesis generation. Invoked automatically by the main command; also usable directly when the user says "set up a repro" or "make this reproducible".
+description: Internal step of /god-of-debugger. Establishes or verifies deterministic repro command before hypothesis generation. Invoked automatically; also directly usable when user says "set up a repro" or "make this reproducible".
 ---
 
-# Repro — Bootstrap the Reproduction Contract
+# Repro — lock the trigger
 
-A hypothesis is only meaningful relative to a trigger you can fire. This skill produces one artifact: a repro command, recorded in session state, that reliably surfaces the bug.
+Hypothesis meaningless without fireable trigger. This skill outputs one artifact: repro command in session state. Caveman tone. No filler.
 
-## The contract
+## Contract
 
-Given `$ARGUMENTS` (bug description or pointer to report), you MUST:
+Given `$ARGUMENTS` (bug desc or report path):
 
-1. Ask for (or derive) a single shell-invocable repro command. Examples: `pytest -k test_checkout_load`, `curl -s localhost:3000/api/checkout | jq .status`, `./repro.sh`.
-2. Run it at least 5 times. Count failures vs successes.
+1. Ask for or derive single shell-invocable repro. Ex: `pytest -k test_checkout_load`, `curl -s localhost:3000/api/checkout | jq .status`, `./repro.sh`.
+2. Run ≥5 times. Count fail vs pass.
 3. Classify:
-   - **deterministic** (≥90% hit rate): proceed.
-   - **flaky** (30–90%): statistical mode — record hit rate and planned repetition count for experiments.
-   - **unreliable** (<30%): STOP. Tell the user the repro must be hardened before falsification is worth the tokens. Offer concrete hardening suggestions (tighter assertion, longer load, specific env).
-4. Write the result into session state (see schema below). Create the session file if absent.
+   - **deterministic** (≥90%): proceed.
+   - **flaky** (30–90%): statistical mode. Record hit rate + planned iterations.
+   - **unreliable** (<30%): STOP. Tell user harden first. Offer concrete hardening (tighter assert, longer load, specific env).
+4. Write session state. Create file if absent.
 
 ## Session file
 
 Path: `.god-of-debugger/sessions/<session_id>.json`
-Pointer: `.god-of-debugger/current` (plain text file containing the active session_id).
+Pointer: `.god-of-debugger/current` (plain text, active `session_id`).
 
-`session_id` format: `<8-char-uuid>-<branch-slug>` where branch-slug is `git branch --show-current | tr '/' '-' | tr -cd 'A-Za-z0-9-'` truncated to 32 chars. Fall back to `nobranch` outside a git repo.
+`session_id` = `<8-char-uuid>-<branch-slug>`. branch-slug = `git branch --show-current | tr '/' '-' | tr -cd 'A-Za-z0-9-'` truncated 32. Outside git → `nobranch`.
 
-Minimum fields to write on first `:repro` run:
+Minimum fields on first repro:
 
 ```json
 {
@@ -49,22 +49,22 @@ Minimum fields to write on first `:repro` run:
 
 ## Workflow
 
-1. If `.god-of-debugger/current` already points at an open session with a repro, print it and ask whether to replace or keep. Default: keep.
-2. Otherwise, generate a fresh `session_id`, write `.god-of-debugger/current`, create the session file.
-3. Run the repro N times (default 20; 5 for expensive commands the user flags).
-4. Record hit rate. If classification is `unreliable`, mark session `status: "repro_unstable"` and halt.
-5. Hand off: **"Repro locked in (<hit_rate>, <classification>). Run `/god-of-debugger:debug` to generate hypotheses."**
+1. `.god-of-debugger/current` exists + points at open session with repro → print it. Ask replace or keep. Default: keep.
+2. Else → new `session_id`, write pointer, create session file.
+3. Run repro N times. Default 20. Use 5 if user flags expensive.
+4. Record hit rate. `unreliable` → `status: "repro_unstable"`. Halt.
+5. Hand off: **"Repro locked (<hit_rate>, <classification>). Run `/god-of-debugger:debug`."**
 
 ## Hard rules
 
-- Do not fabricate a hit rate. Actually run the command.
-- Do not mark a bug "reproduced" on the basis of a single failing run. One data point is not a pattern.
-- Do not write hypotheses in this skill. Wrong phase.
-- If the repro needs infra the current machine lacks (remote service, specific hardware), record that and halt — do not fake it.
+- No fabricated hit rates. Actually run.
+- Single failing run ≠ reproduced. One point ≠ pattern.
+- No hypotheses here. Wrong phase.
+- Infra missing (remote service, hw) → record, halt. No faking.
 
-## Output discipline
+## Output
 
-Final line printed to the user must include the session id, command, hit rate, and classification. Example:
+Final line **exactly** this shape (no extra prose):
 
 ```
 Session: a1b2c3d4-feature-checkout

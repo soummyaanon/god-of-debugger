@@ -1,41 +1,41 @@
 ---
-description: Internal step of /god-of-debugger. Dispatches one hypothesis-runner subagent per hypothesis in parallel and aggregates their verdicts into a survival table. Invoked automatically by the main command after hypotheses are written to session state.
+description: Internal step of /god-of-debugger. Dispatches one hypothesis-runner subagent per hypothesis in parallel. Aggregates verdicts into survival table. Invoked after hypotheses written to session.
 ---
 
-# Run — Parallel Experiment Execution
+# Run — parallel experiment execution
 
-You orchestrate the experiments designed by the `debug` skill. Each hypothesis gets its own subagent (`hypothesis-runner`, or `bisect-runner` for bisect experiments). Subagents run in **parallel** and return a strict verdict.
+Orchestrate experiments from `debug`. One subagent per hypothesis (`hypothesis-runner`, or `bisect-runner` for bisect). Run **parallel**. Strict verdict back.
 
-This skill also maintains the session `cost_log`. Do not optimize blindly; record what happened.
+Also maintain session `cost_log`. Record what happened.
 
 ## Inputs
 
 1. `.god-of-debugger/current` → active `session_id`.
 2. `.god-of-debugger/sessions/<session_id>.json` → bug, repro, localization, hypotheses.
 
-If either is missing, STOP and tell the user to run `/god-of-debugger:repro` and `/god-of-debugger:debug` first.
+Missing either → STOP. Tell user run `/god-of-debugger:repro` + `/god-of-debugger:debug` first.
 
-## Pre-flight checks
+## Pre-flight
 
-- Session must have ≥2 hypotheses with `experiment` specs.
-- Session `status` must be `open` (not `closed`, not `repro_unstable`).
-- Skip any hypothesis listed in `session.parked` — those require runners not in v0.1.
+- Session has ≥2 hypotheses with `experiment` specs.
+- `status == "open"` (not `closed`, not `repro_unstable`).
+- Skip `session.parked` — need runners not in v0.1.
 
-## Orchestration contract
+## Orchestration
 
-1. For every non-parked hypothesis, dispatch one subagent **in a single message with multiple Task tool calls**:
+1. Every non-parked hypothesis → dispatch one subagent. **Single message. Multiple Task tool calls. Parallel.**
    - `experiment.kind == "bisect"` → `bisect-runner`
-   - otherwise → `hypothesis-runner`
-2. Pass each subagent only: `{ session_id, bug_summary, repro: {command, hit_rate}, hypothesis, budget, repo_path }`. Never pass other hypotheses or prior verdicts — isolation is the point.
-3. Wait for all verdicts. Do not early-exit.
-4. For each verdict, ensure the subagent wrote `.god-of-debugger/experiments/<Hn>/preregistered.json`, `verdict.json`, `probe.diff` (if any edit was made), and `run.log`. If artifacts are missing, mark the hypothesis `inconclusive` with `evidence: "runner returned incomplete artifacts"`.
-5. Update `session.hypotheses[i]` with `verdict`, `evidence`, `artifact_path`, `budget_consumed`, `retries`, `confidence`, and `falsification_check`.
-6. Append per-run usage into `session.cost_log.runs[]` with hypothesis id, origin, model, and token usage if available.
-7. Write the survivor set to `session.survivors` and touch `session.updated_at`.
+   - else → `hypothesis-runner`
+2. Pass each subagent only: `{ session_id, bug_summary, repro: {command, hit_rate}, hypothesis, budget, repo_path }`. Never other hypotheses. Never prior verdicts. Isolation = point.
+3. Wait all verdicts. No early exit.
+4. Verify each subagent wrote `.god-of-debugger/experiments/<Hn>/preregistered.json`, `verdict.json`, `probe.diff` (if edit), `run.log`. Missing → mark `inconclusive`, `evidence: "runner returned incomplete artifacts"`.
+5. Update `session.hypotheses[i]` with `verdict`, `evidence`, `artifact_path`, `budget_consumed`, `retries`, `confidence`, `falsification_check`.
+6. Append per-run usage to `session.cost_log.runs[]` with hypothesis id, origin, model, tokens if available.
+7. Write survivor set to `session.survivors`. Touch `session.updated_at`.
 
-## Output format
+## Output — two parts
 
-Print the aggregated table to the user:
+### Part 1 — strict JSON (for pipeline)
 
 ```json
 {
@@ -55,37 +55,50 @@ Print the aggregated table to the user:
 }
 ```
 
-Then, in prose, branch on the outcome:
+### Part 2 — markdown table (for user, in CC terminal)
+
+Render **exactly** this shape. Columns in order:
+
+```
+| ID | Origin | Axis | Verdict | Evidence (≤60 chars) |
+```
+
+- `Origin`: `prim` | `adv`
+- `Verdict`: `killed` | `survived` | `inconc`
+- Order rows: killed first, then survived, then inconclusive.
+- Truncate evidence with `…` if >60 chars.
+
+Then prose, branch on outcome:
 
 ### 0 survivors (all killed)
 
-Round 1 is a miss. The hypothesis set did not contain the cause. Do NOT silently regenerate.
+Round 1 missed. Don't silently regenerate.
 
-> "All hypotheses killed. The cause is in an axis we didn't cover. Run `/god-of-debugger:debug` again — I will regenerate with the axes we already ruled out deprioritized, and must cover at least 2 axes not yet tried. Cap: 2 regeneration rounds before handing back."
+> "All killed. Cause in axis not covered. Run `/god-of-debugger:debug` again. Regenerate with ruled-out axes deprioritized. Must cover ≥2 axes not yet tried. Cap: 2 regen rounds."
 
-Regeneration counter lives in `session.regenerations` (increment on each). After 2, halt and hand control to the user.
+Counter in `session.regenerations` (increment each). After 2, halt, hand to user.
 
 ### Exactly 1 survivor
 
-Likely root cause. State it plainly.
+Likely root cause. State plainly.
 
-> "H_n survived. Origin: <origin>. Axis: <axis>. Evidence: <quote>. Run `/god-of-debugger:promote` to convert the experiment into a regression test before writing the fix."
+> "H_n survived. Origin: <origin>. Axis: <axis>. Evidence: <quote>. Run `/god-of-debugger:promote` to convert experiment to regression test before fix."
 
 ### 2+ survivors
 
-Experiments were not discriminating.
+Experiments not discriminating.
 
-> "N hypotheses survived (H_i, H_j, ...). Design a new experiment that *distinguishes* them — their `expected_if_true` values must differ. Loop back to `/god-of-debugger:debug` with the surviving set as context."
+> "N survived (H_i, H_j, ...). Design experiment that **distinguishes** them — their `expected_if_true` must differ. Loop back to `/god-of-debugger:debug` with survivor set as context."
 
-### Flaky-repro detected mid-run
+### Flaky repro mid-run
 
-If the same hypothesis flips verdict across runner retries (runner reports `retries > 1` with differing evidence), STOP the aggregation, set `session.status = "repro_unstable"`, and tell the user: "Repro became flaky during falsification. Harden it via `/god-of-debugger:repro` before retrying."
+Same hypothesis flips verdict across retries (`retries > 1` with differing evidence) → STOP aggregation. `session.status = "repro_unstable"`. Tell user: "Repro went flaky during falsification. Harden via `/god-of-debugger:repro` before retry."
 
 ## Rules
 
-- Never ship a fix from this skill. The hook will block it anyway if survivor count != 1.
-- Never mark `killed` without quoted evidence from the subagent.
-- `inconclusive` is a first-class verdict. Includes: timeout, crash, ambiguous output, budget exhaustion. Never coerce to `killed`/`survived`.
-- Subagents that crash or time out → their hypothesis is `inconclusive`, not `survived`.
-- Parallel dispatch is non-negotiable. Sequential runs defeat the design.
-- Preserve `origin` in every aggregation table. Users need to know when an adversarial hypothesis is the last one standing.
+- Never ship fix here. Hook blocks anyway if survivors != 1.
+- Never `killed` without quoted evidence from subagent.
+- `inconclusive` is first-class. Includes: timeout, crash, ambiguous output, budget exhaust. Never coerce to `killed`/`survived`.
+- Subagent crashes / times out → `inconclusive`, not `survived`.
+- Parallel dispatch non-negotiable. Sequential defeats design.
+- Preserve `origin` in every table. Users must see when adversarial is last standing.
