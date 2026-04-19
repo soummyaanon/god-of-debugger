@@ -1,10 +1,13 @@
 # god-of-debugger
 
+[![npm](https://img.shields.io/npm/v/%40bixai%2Fgod-of-debugger?style=flat-square&logo=npm&label=npm&color=cb3837)](https://www.npmjs.com/package/@bixai/god-of-debugger)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](../../LICENSE)
+
 **Debug by disproving.** A Claude Code plugin that turns a bug report into a falsification protocol — hypotheses, parallel experiments, and a fix only when exactly one hypothesis survives.
 
-> One command. One paste. Enter to keep going.
+> One command (`/god-of-debugger:go`). One paste. Enter to keep going.
 
-**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger)
+**Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger) · **Install overview:** [root README](../../README.md)
 
 ---
 
@@ -24,14 +27,29 @@ Senior engineers debug by **elimination**. Enumerate what could be wrong, design
 
 ## Install
 
+### npm (recommended)
+
+Install the CLI, sync the plugin into Claude Code, **restart Claude Code**.
+
+```bash
+npm i -g @bixai/god-of-debugger
+god install
+```
+
+**pnpm / yarn / bun:** same pattern — global package, then `god install`. **One-off:** `npx @bixai/god-of-debugger install`. **Maintenance:** `god update`, `god uninstall`, `god doctor`.
+
+Full copy-paste tables and marketplace flow live in the **[repository README](../../README.md)**.
+
+### Claude marketplace
+
 ```bash
 claude plugin marketplace add soummyaanon/god-of-debugger
 claude plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
 
-Or from inside a Claude Code session:
+From inside a Claude Code session:
 
-```
+```text
 /plugin marketplace add soummyaanon/god-of-debugger
 /plugin install god-of-debugger@soumyapanda-cc-marketplace
 ```
@@ -42,7 +60,7 @@ Or from inside a Claude Code session:
 
 One command. That's the whole surface.
 
-```bash
+```text
 /god-of-debugger:go <paste your bug here>
 ```
 
@@ -82,7 +100,7 @@ Default = Enter = keep going. Power users intervene with one keypress. `--yolo` 
 
 ## Walkthrough: "My checkout API throws 500s under load. Sometimes."
 
-```bash
+```text
 /god-of-debugger:go "intermittent 500s on /api/checkout under load"
 ```
 
@@ -203,7 +221,7 @@ This plugin is **slower per bug on purpose**. It trades per-iteration speed for 
 
 - **Subagents isolate context.** Each `hypothesis-runner` sees only the bug, the repro, its one hypothesis, and narrowed `relevant_files`. It never sees other hypotheses or their verdicts.
 - **The adversary** is a separate subagent told to find the category gap the primary pass missed (config, env, deploy, human error, "premise is wrong"). It exists to counter the model's code-bias.
-- **The hook** (`PostToolUse` on `Write|Edit`) reads session state and blocks production-file edits while survivor count ≠ 1.
+- **The hook** (`PreToolUse` / guard script; see `hooks/`) reads session state and blocks production-file edits while survivor count ≠ 1.
 - **Verdict schemas are strict JSON** — the orchestrator parses mechanically so it can't be talked into a wrong conclusion.
 - **Pre-registered kill/survive conditions** are frozen before execution. If they drift after the fact, the system is rationalizing, not falsifying.
 - **`inconclusive` is first-class.** Forcing `killed`/`survived` on ambiguous output is the failure mode this plugin exists to prevent.
@@ -249,7 +267,7 @@ Per-experiment, enforced by the subagent. Budget exhausted without a decisive ve
 god-of-debugger/
 ├── .claude-plugin/plugin.json
 ├── commands/
-│   └── god-of-debugger.md       single entry command; orchestrates everything
+│   └── go.md                    slash command `/god-of-debugger:go`; orchestrates the pipeline
 ├── skills/
 │   ├── repro/SKILL.md           repro bootstrap + session state
 │   ├── debug/SKILL.md           localization + hypothesis generation

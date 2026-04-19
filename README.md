@@ -85,7 +85,8 @@ In a Claude Code session:
 
 ## Versioning
 
-Version is declared in `plugins/god-of-debugger/.claude-plugin/plugin.json` (the manifest wins per official docs). Bump it there, tag the commit, push.
+- **npm releases:** set `version` in root [`package.json`](package.json). `prepublishOnly` runs `npm run sync-version`, which copies that version into [`plugins/god-of-debugger/.claude-plugin/plugin.json`](plugins/god-of-debugger/.claude-plugin/plugin.json) so the Claude manifest matches the tarball.
+- **Ship:** commit, create an annotated tag `v<version>`, push `main` and the tag. [`.github/workflows/publish.yml`](.github/workflows/publish.yml) publishes `@bixai/god-of-debugger` to npm (needs `NPM_TOKEN` in repo secrets).
 
 ## Community
 

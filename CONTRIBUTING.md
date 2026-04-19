@@ -29,14 +29,15 @@ Prompt and copy changes should stay **clear, falsifiable, and safe** — the plu
 
 ## Versioning and releases
 
-- Bump **`plugins/god-of-debugger/.claude-plugin/plugin.json`** `version` when you are preparing a release (see root [README](README.md#versioning)).
-- Tag and push per your release process; keep marketplace and plugin versions aligned with maintainer practice.
+- **npm / GitHub Actions:** bump **`package.json`** `version` at the repo root. Run `npm run sync-version` (or rely on `prepublishOnly` during `npm publish`) so **`plugins/god-of-debugger/.claude-plugin/plugin.json`** stays in lockstep.
+- Tag `v<version>`, push the tag; the publish workflow ships `@bixai/god-of-debugger` to npm. See root [README — Versioning](README.md#versioning).
+- If you change only marketplace metadata, coordinate version bumps with maintainers so the catalog and plugin stay coherent.
 
 ## Pull request checklist
 
 - [ ] Change is limited to what the PR description claims.
 - [ ] Plugin README or root README updated if behavior or layout changed.
-- [ ] `plugin.json` version bumped if this is a release-worthy change (coordinate with maintainers if unsure).
+- [ ] Root `package.json` version bumped (and `npm run sync-version` run) if this is a release-worthy npm publish (coordinate with maintainers if unsure).
 
 ## Questions
 

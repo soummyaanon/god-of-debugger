@@ -1,6 +1,6 @@
 {
   "name": "@bixai/god-of-debugger",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Hypothesis-driven parallel debugging plugin for Claude Code. Generates competing hypotheses, runs experiments in parallel subagents, ships a fix only when exactly one survives.",
   "bin": {
     "god": "./bin/cli.js",

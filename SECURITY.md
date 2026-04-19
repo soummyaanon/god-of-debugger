@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security-sensitive fixes are applied to the default branch (`main`) and reflected in the current marketplace catalog and plugin version in [`plugins/god-of-debugger/.claude-plugin/plugin.json`](plugins/god-of-debugger/.claude-plugin/plugin.json). There is no long-term support policy for older tags; use the latest release when possible.
+Security-sensitive fixes land on the default branch (`main`) and flow into the published **npm** package [`@bixai/god-of-debugger`](https://www.npmjs.com/package/@bixai/god-of-debugger), the marketplace catalog, and the plugin manifest at [`plugins/god-of-debugger/.claude-plugin/plugin.json`](plugins/god-of-debugger/.claude-plugin/plugin.json). There is no long-term support policy for older tags; use the latest release when possible.
 
 ## Reporting a vulnerability
 
