@@ -2,7 +2,7 @@
 'use strict';
 
 const { install, uninstall, doctor, getVersion, SUPPORTED_HOSTS } = require('../lib/install');
-const { pickHost, isInteractive } = require('../lib/prompt');
+const { pickHost, printBanner, isInteractive } = require('../lib/prompt');
 
 function parseArgs(argv) {
   const out = { flags: {}, positional: [] };
@@ -15,6 +15,9 @@ function parseArgs(argv) {
   }
   return out;
 }
+
+const HELP_ALIASES = new Set(['help', '-h', '--help', '-help', undefined]);
+const VERSION_ALIASES = new Set(['-v', '--version', '-version', 'version']);
 
 const cmd = process.argv[2];
 const rest = process.argv.slice(3);
@@ -34,6 +37,15 @@ async function resolveHost({ verbAction }) {
 }
 
 async function main() {
+  if (HELP_ALIASES.has(cmd)) {
+    printHelp();
+    return;
+  }
+  if (VERSION_ALIASES.has(cmd)) {
+    console.log(getVersion());
+    return;
+  }
+
   switch (cmd) {
     case 'install': {
       const host = await resolveHost({ verbAction: 'install' });
@@ -49,16 +61,6 @@ async function main() {
     }
     case 'doctor':
       return doctor();
-    case '-v':
-    case '--version':
-      console.log(getVersion());
-      return;
-    case 'help':
-    case '-h':
-    case '--help':
-    case undefined:
-      printHelp();
-      return;
     default:
       console.error(`Unknown command: ${cmd}\n`);
       printHelp();
@@ -67,7 +69,8 @@ async function main() {
 }
 
 function printHelp() {
-  console.log(`god-of-debugger — multi-host debugging plugin installer
+  if (isInteractive()) printBanner();
+  console.log(`god-of-debugger — multi-host debugging plugin installer  v${getVersion()}
 
 Usage:
   god install                     Interactive host picker
@@ -77,6 +80,7 @@ Usage:
   god uninstall [--host=<host>]   Remove plugin surface for a host
   god doctor                      Check install + repo layout health
   god --version                   Print version
+  god --help                      Show this help
 
 Hosts: ${SUPPORTED_HOSTS.join(', ')}
   claude    Claude Code plugin (installs to ~/.claude/plugins/)

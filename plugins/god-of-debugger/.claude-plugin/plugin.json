@@ -1,7 +1,7 @@
 {
   "name": "god-of-debugger",
   "description": "Hypothesis-driven parallel debugging. Generates multiple competing hypotheses, runs experiments in parallel subagents, and only ships a fix when exactly one hypothesis survives.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": {
     "name": "Soumya Ranjan Panda"
   },
