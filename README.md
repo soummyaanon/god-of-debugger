@@ -4,7 +4,7 @@
 [![Node.js](https://img.shields.io/node/v/%40bixai%2Fgod-of-debugger?style=flat-square&logo=node.js&label=Node&color=339933)](https://github.com/soummyaanon/god-of-debugger)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Falsification-first, hypothesis-driven parallel debugging** for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+**Falsification-first, hypothesis-driven parallel debugging** — ships to Claude Code, Cursor, Codex CLI, Continue.dev, and any [open-plugins](https://open-plugins.com)-compatible host.
 
 **Website:** [godofdebugger.bixai.dev](https://godofdebugger.bixai.dev/) · **Repo:** [github.com/soummyaanon/god-of-debugger](https://github.com/soummyaanon/god-of-debugger) · **Plugin docs:** [`plugins/god-of-debugger/README.md`](plugins/god-of-debugger/README.md)
 
@@ -22,7 +22,44 @@ Think: *scientific method + parallel agents*, not a single linear “try this, t
 
 ---
 
-## Install (npm — recommended)
+## Supported agents
+
+| Host | Surface | Install command | Parallel subagents | Ship-the-fix hook |
+|------|---------|-----------------|:------------------:|:-----------------:|
+| **Claude Code** | native plugin | `god install` | yes | yes (PreToolUse) |
+| **Cursor** | `.cursor/rules/god-of-debugger.mdc` | `god install --host=cursor` | no (sequential fallback) | prose rule |
+| **Codex CLI** | `AGENTS.md` at repo root | `god install --host=codex` | no | prose rule |
+| **Continue.dev** | `.continue/config.yaml` | `god install --host=continue` | no | prose rule |
+| **open-plugins** | `.plugin/` bundle | `god install --host=open` | host-dependent | host-dependent |
+
+On hosts without PreToolUse hooks, the **"don't propose a fix unless exactly one hypothesis survived"** rule is enforced as a prose rule the model must self-police.
+
+> Short usage guide: [`USAGE.md`](USAGE.md).
+
+## Install — interactive picker (easiest)
+
+If you don't remember host flags, just run:
+
+```bash
+npm i -g @bixai/god-of-debugger
+god install
+```
+
+An arrow-key picker appears:
+
+```text
+Pick a host to install god-of-debugger:
+❯ Claude Code   native plugin · parallel subagents · PreToolUse hook
+  Cursor        writes .cursor/rules/god-of-debugger.mdc
+  Codex CLI     writes ./AGENTS.md
+  Continue.dev  writes .continue/config.yaml
+  open-plugins  copies ./.plugin/ bundle into project
+↑/↓ move · enter select · q/ctrl-c cancel
+```
+
+Navigate with `↑`/`↓` (or `j`/`k`, or number keys `1-5`), press **Enter** to install. `Ctrl-C` or `q` to cancel. In a non-TTY environment (CI, piped input), it silently defaults to `claude`; add `-y` to force non-interactive mode.
+
+## Install (Claude Code — npm, recommended)
 
 Install the CLI globally, sync the plugin into Claude Code, then **restart Claude Code** so the plugin loads.
 
@@ -62,6 +99,88 @@ Still **restart Claude Code** after `install` so the plugin is picked up.
 | `god update` | Refresh the installed plugin from the package |
 | `god uninstall` | Remove the plugin from Claude Code |
 | `god doctor` | Quick health check |
+
+---
+
+## Install (Cursor)
+
+```bash
+npm i -g @bixai/god-of-debugger
+cd /path/to/your/project
+god install --host=cursor
+```
+
+Drops `.cursor/rules/god-of-debugger.mdc` into the project.
+
+Then in Cursor:
+1. Reload the window.
+2. Open **Cursor Settings → Rules** and confirm `god-of-debugger` is listed.
+3. In chat, paste a stack trace or describe the bug. Or force it: `@god-of-debugger debug this failing test`.
+
+Cursor has no subagent dispatch, so experiments run sequentially. The `S==1` fix-refusal rule is enforced as prose.
+
+## Install (Codex CLI)
+
+```bash
+npm i -g @bixai/god-of-debugger
+cd /path/to/your/project
+god install --host=codex
+```
+
+Drops `AGENTS.md` at the project root. Codex reads it on every session from that dir.
+
+```bash
+codex
+> debug this: npm test -- auth.spec.ts
+```
+
+If an `AGENTS.md` already exists, the installer refuses to clobber — merge the god-of-debugger section manually.
+
+## Install (Continue.dev)
+
+```bash
+npm i -g @bixai/god-of-debugger
+cd /path/to/your/project
+god install --host=continue
+```
+
+Writes `.continue/config.yaml` with a `/god-of-debugger` slash prompt + rule.
+
+Then in Continue's chat panel:
+
+```text
+/god-of-debugger login endpoint returns 500 on valid creds
+```
+
+## Install (open-plugins host)
+
+```bash
+cd /path/to/your/project
+god install --host=open
+```
+
+Copies the `.plugin/` bundle into the project. Any [open-plugins](https://open-plugins.com)-compliant host picks it up from there.
+
+## No-install path (`npx`) — any host
+
+```bash
+npx @bixai/god-of-debugger install --host=cursor
+npx @bixai/god-of-debugger install --host=codex
+npx @bixai/god-of-debugger install --host=continue
+npx @bixai/god-of-debugger install --host=open
+```
+
+## Uninstall per host
+
+```bash
+god uninstall                    # Claude Code
+god uninstall --host=cursor      # removes .cursor/rules/god-of-debugger.mdc
+god uninstall --host=codex       # removes AGENTS.md
+god uninstall --host=continue    # removes .continue/config.yaml
+god uninstall --host=open        # removes .plugin/
+```
+
+Run `god doctor` any time to see which hosts are installed.
 
 ---
 

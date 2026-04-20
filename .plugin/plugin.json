@@ -1,0 +1,43 @@
+{
+  "name": "god-of-debugger",
+  "version": "0.5.0",
+  "description": "Hypothesis-driven parallel debugging. Generates competing hypotheses, runs experiments in parallel subagents, ships a fix only when exactly one survives.",
+  "author": {
+    "name": "Soumya Ranjan Panda",
+    "email": "soumyaranjanpanda910@gmail.com"
+  },
+  "homepage": "https://godofdebugger.bixai.dev/",
+  "repository": "https://github.com/soummyaanon/god-of-debugger",
+  "license": "MIT",
+  "keywords": [
+    "debugger",
+    "hypothesis",
+    "falsification",
+    "agents",
+    "parallel"
+  ],
+  "components": {
+    "skills": "./skills",
+    "agents": "./agents",
+    "hooks": "./hooks",
+    "commands": "./commands",
+    "rules": "./rules"
+  },
+  "entrypoints": {
+    "command": "/god-of-debugger:go"
+  },
+  "hosts": {
+    "claude-code": {
+      "manifest": "../plugins/god-of-debugger/.claude-plugin/plugin.json"
+    },
+    "cursor": {
+      "rules": "../.cursor/rules/god-of-debugger.mdc"
+    },
+    "codex": {
+      "agents": "../AGENTS.md"
+    },
+    "continue": {
+      "config": "../.continue/config.yaml"
+    }
+  }
+}

@@ -1,0 +1,69 @@
+name: god-of-debugger
+version: 0.5.0
+schema: v1
+
+# Continue.dev config surface for god-of-debugger.
+# Continue has no subagent dispatch or PreToolUse hooks. The parallel
+# hypothesis-runner step degrades to sequential; the ship-the-fix guard
+# is enforced as a prose rule the model must self-police.
+
+rules:
+  - name: god-of-debugger
+    rule: |
+      Falsification-first debugging. When the user reports a bug, failing
+      test, flaky behavior, or stack trace, run the god-of-debugger
+      pipeline.
+
+      NEVER propose a fix unless exactly ONE hypothesis survives
+      experiments. Multiple survivors or zero survivors = refuse to write
+      fix code and ask for another falsification round.
+
+      Full pipeline reference lives at plugins/god-of-debugger/commands/go.md
+      in the repo root.
+
+prompts:
+  - name: god-of-debugger
+    description: Run the full hypothesis-driven parallel debugging pipeline
+    prompt: |
+      You are running the god-of-debugger pipeline. Caveman tone: terse,
+      technical, no filler. Fragments OK.
+
+      ## 1. Repro
+      Confirm a deterministic failing command. No repro → no hypotheses.
+      If missing, ask the user for: command, expected output, actual
+      output, recent changes.
+
+      ## 2. Localize + hypothesize
+      - Grep bug symbols. Inspect stack. List recent files.
+      - Generate 5–8 PRIMARY hypotheses across ≥4 of 7 causal axes:
+        data, control-flow, concurrency, config, deps, env, contract.
+      - Add 2–3 ADVERSARIAL hypotheses from missed categories.
+      - Each hypothesis → one typed experiment: probe | assertion | test.
+        Pre-register kill/survive condition.
+
+      ## 3. Gate 1 — hypothesis review
+      Print table with columns exactly:
+      | ID | Origin | Axis | Claim (≤80 chars) | Exp | Cost |
+      Ask: [Enter] run all · [e] edit · [s] skip
+
+      ## 4. Run experiments
+      Continue has no parallel subagents. Run sequentially. Record
+      verdict: killed | survived | inconclusive.
+
+      ## 5. Gate 2 — survival review
+      Print table:
+      | ID | Origin | Axis | Verdict | Evidence (≤60 chars) |
+      Let S = count(survived) + count(inconclusive).
+
+      ## 6. Fix + promote (only if S == 1)
+      - Minimal fix referencing hypothesis id + evidence.
+      - Promote surviving experiment to regression test in tests/, spec/,
+        __tests__/, or test/.
+
+      ## SHIP-THE-FIX GUARD (non-negotiable)
+      If S != 1, refuse to write fix code. Print verbatim:
+      "<S> hypotheses still alive. Shipping fix now = guessing which one.
+      Run another round of falsification, or explicitly accept you're
+      guessing?"
+
+      Bug to debug: {{{ input }}}
