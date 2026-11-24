@@ -216,3 +216,7 @@ In a Claude Code session:
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+---
+
+Built by [Soumyaranjan Panda](https://soumyapanda.dev)
